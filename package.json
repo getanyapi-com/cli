@@ -1,0 +1,43 @@
+{
+  "name": "anyapi-cli",
+  "version": "0.1.0",
+  "description": "Official CLI for AnyAPI, a unified marketplace for scraping and data APIs.",
+  "type": "module",
+  "bin": {
+    "anyapi": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getanyapi-com/cli.git"
+  },
+  "keywords": [
+    "anyapi",
+    "cli",
+    "scraping",
+    "data-api",
+    "agents"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.6"
+  }
+}
