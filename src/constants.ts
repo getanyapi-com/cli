@@ -1,0 +1,12 @@
+export const SITE_URL = 'https://getanyapi.com';
+export const DASHBOARD_URL = `${SITE_URL}/dashboard`;
+export const DASHBOARD_KEYS_URL = `${SITE_URL}/dashboard/keys`;
+export const API_BASE_URL = 'https://api.getanyapi.com';
+export const REST_BASE_URL = `${API_BASE_URL}/v1`;
+export const CATALOG_URL = `${API_BASE_URL}/catalog`;
+export const SIGNUP_URL = `${API_BASE_URL}/agent/signup`;
+export const MCP_URL = `${API_BASE_URL}/mcp`;
+export const API_KEY_ENV = 'ANYAPI_API_KEY';
+export const CONFIG_DIR_NAME = '.anyapi';
+export const CONFIG_FILE_NAME = 'config.json';
+export const CREDIT_TO_USD = 0.00001;

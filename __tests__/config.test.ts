@@ -1,0 +1,40 @@
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { getConfigPath, readConfig, writeConfig } from '../src/config.js';
+
+const tempDirs: string[] = [];
+
+describe('config storage', () => {
+  afterEach(async () => {
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  it('reads missing config as an empty object', async () => {
+    const dir = await tempDir();
+    await expect(readConfig(getConfigPath(dir))).resolves.toEqual({});
+  });
+
+  it('writes config JSON with owner-only file permissions', async () => {
+    const dir = await tempDir();
+    const configPath = getConfigPath(dir);
+    await writeConfig({ apiKey: 'aa_live_test', claimToken: 'claim' }, configPath);
+
+    await expect(readConfig(configPath)).resolves.toEqual({
+      apiKey: 'aa_live_test',
+      claimToken: 'claim',
+    });
+
+    if (process.platform !== 'win32') {
+      const mode = (await stat(configPath)).mode & 0o777;
+      expect(mode).toBe(0o600);
+    }
+  });
+});
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'anyapi-cli-'));
+  tempDirs.push(dir);
+  return dir;
+}
