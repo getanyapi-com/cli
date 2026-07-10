@@ -1,13 +1,34 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { getConfigPath, mergeConfig, readConfig } from './config.js';
 import { AnyApiClient } from './api.js';
-import { API_KEY_ENV, DASHBOARD_URL } from './constants.js';
+import { API_KEY_ENV, CONFIG_DIR_NAME, DASHBOARD_URL } from './constants.js';
 import { CliError } from './errors.js';
+import { JqEvalError } from './jq.js';
 import { resolveApiKey } from './auth.js';
 import { formatCatalogPrice, formatUsd, printTable } from './format.js';
-import { buildRunOutputPath, formatCapExceededMessage, isKeyCapExceeded, parseRunInput, summarizeRun, writeRunOutput } from './run.js';
+import {
+  buildRunOutputPath,
+  formatCapExceededMessage,
+  isKeyCapExceeded,
+  localRereadHint,
+  parseRunInput,
+  stripServerHint,
+  summarizeRun,
+  writeRunOutput,
+} from './run.js';
+import { hasShapeFlags, shapeAndJq, type ShapeRequest } from './shape.js';
+import { resolveLastFile } from './view.js';
 import { configureMcp, detectAgents, installSkillsForAgents, printAgentDetection } from './init.js';
 import { promptYesNo, writeLine, type CommandContext } from './io.js';
-import type { AnyApiConfig, CatalogApi, RunOptions, SignupResponse } from './types.js';
+import type { AnyApiConfig, CatalogApi, RunResult, SignupResponse } from './types.js';
+
+interface ShapeCliOptions {
+  fields?: string;
+  maxItems?: string;
+  summary?: boolean;
+  jq?: string;
+}
 
 export interface GlobalOptions {
   apiKey?: string;
@@ -58,22 +79,16 @@ export async function runCommand(
   ctx: CommandContext,
   global: GlobalOptions,
   sku: string,
-  options: { input?: string; inputFile?: string; fields?: string; maxItems?: string; summary?: boolean; output?: string; json?: boolean },
+  options: ShapeCliOptions & { input?: string; inputFile?: string; output?: string; json?: boolean },
 ): Promise<void> {
   const auth = await requireApiKey(ctx, global);
   const client = new AnyApiClient({ apiKey: auth.apiKey, fetchImpl: ctx.fetchImpl });
   const input = await parseRunInput(options);
-  const runOptions = parseRunOptions(options);
+  const shape = parseShapeRequest(options);
 
+  let result: RunResult;
   try {
-    const result = await client.run(sku, input, runOptions);
-    if (options.json) {
-      writeLine(ctx.stdout, JSON.stringify(result));
-      return;
-    }
-    const outputPath = options.output ?? buildRunOutputPath(sku, new Date(), ctx.cwd);
-    await writeRunOutput(result, outputPath);
-    writeLine(ctx.stdout, summarizeRun(result, outputPath, ctx.cwd));
+    result = stripServerHint(await client.run(sku, input));
   } catch (error) {
     if (isKeyCapExceeded(error)) {
       writeLine(ctx.stderr, formatCapExceededMessage(auth.config));
@@ -81,6 +96,48 @@ export async function runCommand(
     }
     throw error;
   }
+
+  const shaped = hasShapeFlags(shape);
+  const target = shapeTarget(result);
+
+  // --json: print to stdout, write no file. Shaped when shape flags are set, else
+  // the full envelope.
+  if (options.json) {
+    const view = shaped ? await evalShape(target, shape) : result;
+    writeLine(ctx.stdout, JSON.stringify(view));
+    return;
+  }
+
+  // Always save the FULL result, then print the 3-line summary.
+  const outputPath = options.output ?? buildRunOutputPath(sku, new Date(), ctx.cwd);
+  await writeRunOutput(result, outputPath);
+  writeLine(ctx.stdout, summarizeRun(result, outputPath, ctx.cwd));
+
+  // Shape flags: also print the locally shaped view (pretty). No shape flags: a
+  // one-line nudge to re-slice the saved file for free when it is large.
+  if (shaped) {
+    writeLine(ctx.stdout, JSON.stringify(await evalShape(target, shape), null, 2));
+    return;
+  }
+  const hint = localRereadHint(result, sku);
+  if (hint) {
+    writeLine(ctx.stdout, hint);
+  }
+}
+
+export async function viewCommand(
+  ctx: CommandContext,
+  path: string | undefined,
+  options: ShapeCliOptions & { last?: string | boolean; json?: boolean },
+): Promise<void> {
+  const filePath = await resolveViewPath(ctx, path, options.last);
+  const doc = parseEnvelope(await readFile(filePath, 'utf8'), filePath);
+  const shape = parseShapeRequest(options);
+  // jq/fields target the `output` envelope ({found, data}) when the file is a run
+  // envelope, matching server-side jq semantics; otherwise shape the whole document.
+  const target = isRecord(doc) && 'output' in doc ? doc.output : doc;
+  const view = hasShapeFlags(shape) ? await evalShape(target, shape) : target;
+  writeLine(ctx.stdout, options.json ? JSON.stringify(view) : JSON.stringify(view, null, 2));
 }
 
 export async function balanceCommand(ctx: CommandContext, global: GlobalOptions): Promise<void> {
@@ -188,10 +245,13 @@ function writeCatalogTable(ctx: CommandContext, apis: CatalogApi[]): void {
   writeLine(ctx.stdout, printTable(rows));
 }
 
-function parseRunOptions(options: { fields?: string; maxItems?: string; summary?: boolean }): RunOptions {
-  const parsed: RunOptions = {};
+function parseShapeRequest(options: ShapeCliOptions): ShapeRequest {
+  const parsed: ShapeRequest = {};
   if (options.fields) {
-    parsed.fields = options.fields;
+    const fields = options.fields.split(',').map((field) => field.trim()).filter(Boolean);
+    if (fields.length > 0) {
+      parsed.fields = fields;
+    }
   }
   if (options.maxItems !== undefined) {
     const value = Number(options.maxItems);
@@ -203,7 +263,50 @@ function parseRunOptions(options: { fields?: string; maxItems?: string; summary?
   if (options.summary) {
     parsed.summary = true;
   }
+  if (options.jq) {
+    parsed.jq = options.jq;
+  }
   return parsed;
+}
+
+// evalShape applies local shaping and turns a jq failure into a CliError so the
+// message surfaces once on stderr with a non-zero exit. The full paid result is
+// already safe on disk, so nothing is wasted.
+async function evalShape(target: unknown, shape: ShapeRequest): Promise<unknown> {
+  try {
+    return await shapeAndJq(target, shape);
+  } catch (error) {
+    if (error instanceof JqEvalError) {
+      throw new CliError(error.message);
+    }
+    throw error;
+  }
+}
+
+function shapeTarget(result: RunResult): unknown {
+  return result.output !== undefined ? result.output : result;
+}
+
+async function resolveViewPath(ctx: CommandContext, path: string | undefined, last: string | boolean | undefined): Promise<string> {
+  if (path) {
+    return path;
+  }
+  const sku = typeof last === 'string' ? last : undefined;
+  const dir = join(ctx.cwd, CONFIG_DIR_NAME);
+  const found = await resolveLastFile(dir, sku);
+  if (!found) {
+    throw new CliError(sku ? `No saved runs for ${sku} in ${dir}.` : `No saved runs in ${dir}. Run a SKU first.`);
+  }
+  return found;
+}
+
+function parseEnvelope(raw: string, source: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliError(`Invalid JSON in ${source}: ${message}`);
+  }
 }
 
 function formatBalance(value: unknown): string {

@@ -1,6 +1,6 @@
 import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { ApiError } from './errors.js';
-import type { CatalogResponse, FetchLike, RunOptions, RunResult, SignupResponse } from './types.js';
+import type { CatalogResponse, FetchLike, RunResult, SignupResponse } from './types.js';
 
 export interface AnyApiClientOptions {
   apiKey?: string;
@@ -59,17 +59,11 @@ export class AnyApiClient {
     });
   }
 
-  async run(sku: string, input: unknown, options: RunOptions = {}): Promise<RunResult> {
+  // run always fetches the FULL result. Response shaping (fields/max_items/summary/
+  // jq) is done locally by the CLI over the saved file, so re-slicing a paid run
+  // costs nothing; no shape params are sent upstream.
+  async run(sku: string, input: unknown): Promise<RunResult> {
     const url = new URL(`${this.restBaseUrl}/run/${encodeURIComponent(sku)}`);
-    if (options.fields) {
-      url.searchParams.set('fields', options.fields);
-    }
-    if (options.maxItems !== undefined) {
-      url.searchParams.set('max_items', String(options.maxItems));
-    }
-    if (options.summary) {
-      url.searchParams.set('summary', 'true');
-    }
     return this.requestJson<RunResult>(url, {
       method: 'POST',
       headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
