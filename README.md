@@ -19,17 +19,18 @@ node dist/index.js --help
 ## Quick start
 
 ```sh
-anyapi signup --label my-agent
+anyapi init
 anyapi search reddit
 anyapi describe reddit.search
 anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 ```
 
-`signup` creates a capped starter key, stores it in `~/.anyapi/config.json`, and prints the claim URL. The secret key is not printed unless you pass `--show-key`.
+`anyapi init` mints a **free trial key** when none is available (about $0.15 of requests, no account created, self-expires in 7 days), saves it to `~/.anyapi/config.json`, and installs the bundled agent skills. When the trial budget runs out, `anyapi connect` upgrades past it with one human approval.
 
 ## Commands
 
-- `anyapi signup [--email <email>] [--label <label>] [--show-key]` - create a capped starter key and save it locally.
+- `anyapi signup [--label <label>] [--show-key]` - mint a free trial key and save it locally. The secret is not printed unless you pass `--show-key`.
+- `anyapi connect` - upgrade past the free trial via a one-URL OAuth 2.1 approval (Authorization Code + PKCE over a loopback callback). Prints a single consent URL for a human to open; on approval the CLI stores the access token and keeps working.
 - `anyapi login --api-key aa_live_...` - store an existing dashboard key locally.
 - `anyapi search <query>` - search the public catalog and print SKU, name, and USD price terms.
 - `anyapi list [--category <cat>]` - list catalog APIs.
@@ -37,11 +38,10 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi run <sku> [--input '<json>'] [-i file] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [-o path] [--json]` - run an API. Always saves the full result; shape flags trim only the stdout view.
 - `anyapi view [path] [--last [sku]] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [--json]` - re-shape a saved run file locally. Zero network, zero cost.
 - `anyapi balance` - print the remaining USD balance.
-- `anyapi claim` - reprint stored claim guidance.
-- `anyapi init [--all] [--yes]` - install bundled agent skills and show or apply MCP setup snippets.
+- `anyapi init [--all] [--yes]` - mint a trial key if none exists, install bundled agent skills, and show or apply MCP setup snippets.
 - `anyapi setup skills` - install only the bundled skills.
 
-Auth resolution order is `--api-key`, then `ANYAPI_API_KEY`, then `~/.anyapi/config.json`. Commands that require auth offer self-signup in an interactive terminal.
+Auth resolution order is `--api-key`, then `ANYAPI_API_KEY`, then `~/.anyapi/config.json`, then trial self-signup. When the trial budget is spent, runs return HTTP 402 `trial_cap_reached`; run `anyapi connect` to continue.
 
 ## Run output and local shaping
 

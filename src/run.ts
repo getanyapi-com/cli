@@ -1,9 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
-import { DASHBOARD_URL } from './constants.js';
 import { ApiError, CliError } from './errors.js';
 import { formatUsd } from './format.js';
-import type { AnyApiConfig, RunResult } from './types.js';
+import type { RunResult } from './types.js';
 
 export interface ParseInputOptions {
   input?: string;
@@ -66,27 +65,39 @@ export function localRereadHint(result: RunResult, sku: string): string | undefi
   return `hint: slice this file at no cost: anyapi view --last ${sku} --jq '.data'`;
 }
 
-export function isKeyCapExceeded(error: unknown): boolean {
+// isTrialCapReached detects the 402 the gateway returns once a trial key's spend
+// cap is reached (error code trial_cap_reached). No charge is made for the
+// blocked call.
+export function isTrialCapReached(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 402) {
     return false;
   }
   if (!isRecord(error.body)) {
     return false;
   }
-  const keys = [error.body.error, error.body.key, error.body.code, error.body.message];
-  return keys.some((value) => value === 'key_cap_exceeded');
+  const keys = [error.body.error, error.body.key, error.body.code];
+  return keys.some((value) => value === 'trial_cap_reached');
 }
 
-export function formatCapExceededMessage(config: AnyApiConfig = {}): string {
-  const lines = [
-    'This starter key has reached its USD cap.',
-    `Claim or fund it here: ${config.claimUrl ?? DASHBOARD_URL}`,
-  ];
-  if (config.claimToken) {
-    lines.push(`Claim token: ${config.claimToken}`);
+// formatTrialCapMessage relays the server's upgrade guidance (which names
+// `anyapi connect`) when present, else a local default pointing at the same
+// command.
+export function formatTrialCapMessage(error: unknown): string {
+  const serverMessage = trialCapServerMessage(error);
+  if (serverMessage) {
+    return serverMessage;
   }
-  lines.push('After claiming, keep using the same key or run anyapi login --api-key aa_live_...');
-  return lines.join('\n');
+  return [
+    'This trial key has reached its spend cap. No charge was made for the blocked call.',
+    'Upgrade past the trial with one human approval: anyapi connect',
+  ].join('\n');
+}
+
+function trialCapServerMessage(error: unknown): string | undefined {
+  if (error instanceof ApiError && isRecord(error.body) && typeof error.body.message === 'string' && error.body.message.length > 0) {
+    return error.body.message;
+  }
+  return undefined;
 }
 
 function parseJson(raw: string, source: string): unknown {

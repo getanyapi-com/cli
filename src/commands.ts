@@ -1,16 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getConfigPath, mergeConfig, readConfig } from './config.js';
+import { getConfigPath, mergeConfig } from './config.js';
 import { AnyApiClient } from './api.js';
-import { API_KEY_ENV, CONFIG_DIR_NAME, DASHBOARD_URL } from './constants.js';
+import { API_KEY_ENV, CONFIG_DIR_NAME } from './constants.js';
 import { CliError } from './errors.js';
 import { JqEvalError } from './jq.js';
 import { resolveApiKey } from './auth.js';
 import { formatCatalogPrice, formatUsd, printTable } from './format.js';
 import {
   buildRunOutputPath,
-  formatCapExceededMessage,
-  isKeyCapExceeded,
+  formatTrialCapMessage,
+  isTrialCapReached,
   localRereadHint,
   parseRunInput,
   stripServerHint,
@@ -34,14 +34,16 @@ export interface GlobalOptions {
   apiKey?: string;
 }
 
-export async function signupCommand(ctx: CommandContext, options: { email?: string; label?: string; showKey?: boolean }): Promise<void> {
+export async function signupCommand(ctx: CommandContext, options: { label?: string; showKey?: boolean }): Promise<void> {
   const client = new AnyApiClient({ fetchImpl: ctx.fetchImpl });
-  const signup = await client.signup({ sponsorEmail: options.email, label: options.label });
+  const signup = await client.signup({ label: options.label });
   await saveSignup(ctx, signup);
-  writeLine(ctx.stdout, `Starter cap: ${formatUsd(signup.capUsd)}`);
-  writeLine(ctx.stdout, `Claim URL: ${signup.claimUrl}`);
-  writeLine(ctx.stdout, `Expires at: ${signup.expiresAt}`);
-  writeLine(ctx.stdout, 'Claim this key within 7 days to keep it active and fund it.');
+  writeLine(ctx.stdout, `Free trial: ${formatUsd(signup.capUsd)} of requests, no account created.`);
+  writeLine(ctx.stdout, `Self-expires in 7 days (${signup.expiresAt}) if never upgraded.`);
+  if (signup.notice) {
+    writeLine(ctx.stdout, signup.notice);
+  }
+  writeLine(ctx.stdout, 'When the trial budget runs out, run anyapi connect to upgrade past it.');
   if (options.showKey) {
     writeLine(ctx.stdout, `API key: ${signup.secret}`);
   } else {
@@ -90,9 +92,9 @@ export async function runCommand(
   try {
     result = stripServerHint(await client.run(sku, input));
   } catch (error) {
-    if (isKeyCapExceeded(error)) {
-      writeLine(ctx.stderr, formatCapExceededMessage(auth.config));
-      throw new CliError('key_cap_exceeded');
+    if (isTrialCapReached(error)) {
+      writeLine(ctx.stderr, formatTrialCapMessage(error));
+      throw new CliError('trial_cap_reached');
     }
     throw error;
   }
@@ -147,26 +149,10 @@ export async function balanceCommand(ctx: CommandContext, global: GlobalOptions)
   writeLine(ctx.stdout, formatBalance(balance));
 }
 
-export async function claimCommand(ctx: CommandContext): Promise<void> {
-  const config = await readConfig(getConfigPath(ctx.homeDir));
-  if (!config.claimToken && !config.claimUrl) {
-    writeLine(ctx.stdout, `No claim token is saved. Open ${DASHBOARD_URL} to manage AnyAPI keys.`);
-    return;
-  }
-  writeLine(ctx.stdout, `Claim URL: ${config.claimUrl ?? DASHBOARD_URL}`);
-  if (config.claimToken) {
-    writeLine(ctx.stdout, `Claim token: ${config.claimToken}`);
-  }
-  if (config.expiresAt) {
-    writeLine(ctx.stdout, `Expires at: ${config.expiresAt}`);
-  }
-  writeLine(ctx.stdout, 'Claim this key in the dashboard to keep it active and fund it.');
-}
-
 export async function initCommand(ctx: CommandContext, global: GlobalOptions, options: { all?: boolean; yes?: boolean }): Promise<void> {
   const auth = await resolveApiKey({ apiKey: global.apiKey, env: ctx.env, configPath: getConfigPath(ctx.homeDir) });
-  if (!auth.apiKey) {
-    await maybeSignup(ctx, options.yes);
+  if (auth.source === 'missing') {
+    await maybeSignup(ctx, true);
   }
   const detections = await detectAgents(ctx);
   printAgentDetection(ctx, detections);
@@ -210,15 +196,18 @@ async function requireApiKey(ctx: CommandContext, global: GlobalOptions): Promis
 }
 
 async function maybeSignup(ctx: CommandContext, force?: boolean): Promise<{ apiKey?: string; config: AnyApiConfig }> {
-  const shouldSignup = force === true ? true : await promptYesNo(ctx, 'No AnyAPI key found. Create a capped starter key now?');
+  const shouldSignup = force === true ? true : await promptYesNo(ctx, 'No AnyAPI key found. Mint a free AnyAPI trial key now?');
   if (!shouldSignup) {
     return { config: {} };
   }
   const client = new AnyApiClient({ fetchImpl: ctx.fetchImpl });
   const signup = await client.signup({ label: 'anyapi-cli' });
   const config = await saveSignup(ctx, signup);
-  writeLine(ctx.stdout, `Created starter key with cap ${formatUsd(signup.capUsd)}.`);
-  writeLine(ctx.stdout, `Claim URL: ${signup.claimUrl}`);
+  writeLine(ctx.stdout, `Minted a free AnyAPI trial key: ${formatUsd(signup.capUsd)} of requests, no account, self-expires in 7 days.`);
+  if (signup.notice) {
+    writeLine(ctx.stdout, signup.notice);
+  }
+  writeLine(ctx.stdout, 'When the trial budget runs out, run anyapi connect to upgrade past it.');
   return { apiKey: signup.secret, config };
 }
 
@@ -228,8 +217,7 @@ async function saveSignup(ctx: CommandContext, signup: SignupResponse): Promise<
       apiKey: signup.secret,
       keyId: signup.keyId,
       capUsd: signup.capUsd,
-      claimToken: signup.claimToken,
-      claimUrl: signup.claimUrl,
+      clientId: signup.clientId,
       expiresAt: signup.expiresAt,
       verificationStatus: signup.verificationStatus,
     },

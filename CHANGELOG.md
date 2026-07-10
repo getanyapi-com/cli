@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0
+
+Reframed agent onboarding: self-signup is a free trial, and `anyapi connect`
+upgrades past it via a one-URL OAuth approval.
+
+### Added
+
+- `anyapi connect` - upgrade past the free trial with OAuth 2.1 Authorization Code
+  + PKCE (S256) over an ephemeral `127.0.0.1/callback` loopback. Discovers the
+  authorization server via RFC 8414 metadata (falls back to the hardcoded gateway
+  endpoints), prints a single consent URL for a human, and on approval stores the
+  `aa_at_...` access token, refresh token, expiry, and scope in config - the access
+  token becomes the active key with nothing to swap by hand.
+- `anyapi init` now mints the free trial key when none is resolvable, alongside
+  installing skills and MCP setup.
+
+### Changed
+
+- `anyapi signup` drops the `--email`/sponsor option and speaks the trial framing
+  (about $0.15 of requests, no account, self-expires in 7 days). It persists the
+  trial's OAuth `clientId` for `anyapi connect`, and relays the server `notice`.
+- HTTP 402 handling now recognizes `trial_cap_reached` (was `key_cap_exceeded`) and
+  points at `anyapi connect`.
+
+### Removed
+
+- The `anyapi claim` command and all sponsor/claim vocabulary. The continue path is
+  the OAuth upgrade, not a sponsor email or claim token.
+
 ## 0.2.0
 
 jq-first local shaping. Run once, then re-slice the saved result forever at zero cost.

@@ -1,6 +1,13 @@
 import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { ApiError } from './errors.js';
-import type { CatalogResponse, FetchLike, RunResult, SignupResponse } from './types.js';
+import type {
+  CatalogResponse,
+  FetchLike,
+  OAuthMetadata,
+  RunResult,
+  SignupResponse,
+  TokenResponse,
+} from './types.js';
 
 export interface AnyApiClientOptions {
   apiKey?: string;
@@ -11,7 +18,6 @@ export interface AnyApiClientOptions {
 }
 
 export interface SignupOptions {
-  sponsorEmail?: string;
   label?: string;
 }
 
@@ -31,15 +37,32 @@ export class AnyApiClient {
   }
 
   async signup(options: SignupOptions): Promise<SignupResponse> {
-    const body = compactObject({
-      sponsorEmail: options.sponsorEmail,
-      label: options.label,
-    });
+    const body = compactObject({ label: options.label });
     return this.requestJson<SignupResponse>(this.signupUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, { sanitize: false });
+  }
+
+  // oauthMetadata fetches the RFC 8414 authorization-server document. The caller
+  // falls back to hardcoded endpoints when discovery fails.
+  async oauthMetadata(url: string): Promise<OAuthMetadata> {
+    return this.requestJson<OAuthMetadata>(url, undefined, { sanitize: false });
+  }
+
+  // exchangeToken posts to the OAuth token endpoint as a public client (no secret):
+  // application/x-www-form-urlencoded, used for the authorization_code grant.
+  async exchangeToken(tokenUrl: string, params: Record<string, string>): Promise<TokenResponse> {
+    return this.requestJson<TokenResponse>(
+      tokenUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(params).toString(),
+      },
+      { sanitize: false },
+    );
   }
 
   async catalog(options: { query?: string; category?: string } = {}): Promise<CatalogResponse> {
