@@ -24,7 +24,7 @@ program
   .name('anyapi')
   .description('Official CLI for AnyAPI.')
   .option('--api-key <apiKey>', 'AnyAPI API key. Overrides ANYAPI_API_KEY and local config.')
-  .version('0.3.0');
+  .version('0.3.1');
 
 program
   .command('signup')
@@ -89,7 +89,7 @@ program
 
 program
   .command('connect')
-  .description('Upgrade past the free trial via a one-URL OAuth approval (loopback callback).')
+  .description('Connect an AnyAPI wallet via a one-URL OAuth approval (loopback callback).')
   .action(() => run(() => connectCommand(ctx)));
 
 program

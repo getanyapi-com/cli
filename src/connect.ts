@@ -5,6 +5,7 @@ import { getConfigPath, mergeConfig, readConfig } from './config.js';
 import {
   OAUTH_AUTHORIZE_URL,
   OAUTH_METADATA_URL,
+  OAUTH_REGISTER_URL,
   OAUTH_SCOPE,
   OAUTH_TOKEN_URL,
 } from './constants.js';
@@ -15,26 +16,30 @@ import type { AnyApiConfig, TokenResponse } from './types.js';
 
 const CALLBACK_PATH = '/callback';
 const CONNECT_TIMEOUT_MS = 5 * 60 * 1000;
+const CLI_CLIENT_NAME = 'AnyAPI CLI';
+// Portless loopback redirect URIs registered for the CLI's public client. The
+// server matches ports flexibly at authorize time, so registering portless is
+// correct and lets each run bind an ephemeral loopback port.
+const LOOPBACK_REDIRECT_URIS = ['http://127.0.0.1/callback', 'http://localhost/callback'];
 
 interface Endpoints {
   authorizationEndpoint: string;
   tokenEndpoint: string;
+  registrationEndpoint: string;
 }
 
-// connectCommand upgrades a trial key past its cap with a one-URL OAuth 2.1
-// Authorization Code + PKCE approval over a loopback callback. It reads the
-// trial's OAuth client id from config, runs the browser consent, exchanges the
-// code, and swaps the active apiKey for the access token.
+// connectCommand connects an AnyAPI wallet with a one-URL OAuth 2.1 Authorization
+// Code + PKCE approval over a loopback callback. It resolves an OAuth client id
+// (trial client, a previously registered CLI client, or a fresh Dynamic Client
+// Registration), runs the browser consent, exchanges the code, and stores the
+// access token as the active apiKey. Works from a cold start with no trial key.
 export async function connectCommand(ctx: CommandContext): Promise<void> {
   const configPath = getConfigPath(ctx.homeDir);
   const config = await readConfig(configPath);
-  const clientId = config.clientId?.trim();
-  if (!clientId) {
-    throw new CliError('No trial client found - run `anyapi init` or `anyapi signup` first.');
-  }
 
   const client = new AnyApiClient({ fetchImpl: ctx.fetchImpl });
   const endpoints = await resolveEndpoints(client);
+  const clientId = await resolveClientId(config, client, endpoints.registrationEndpoint, configPath);
   const pkce = createPkce();
   const state = randomState();
 
@@ -72,18 +77,64 @@ export function connectionConfigFromToken(token: TokenResponse, now: Date = new 
   return patch;
 }
 
+// resolveClientId picks the OAuth client id in priority order: the per-trial
+// client from signup/init (preserves the trial-upgrade receipt), else a CLI
+// client previously registered via Dynamic Client Registration, else a fresh DCR
+// whose client id is persisted so the rate-limited endpoint is hit at most once.
+export async function resolveClientId(
+  config: AnyApiConfig,
+  client: AnyApiClient,
+  registrationEndpoint: string,
+  configPath: string,
+): Promise<string> {
+  const trialClientId = config.clientId?.trim();
+  if (trialClientId) {
+    return trialClientId;
+  }
+  const cliClientId = config.cliClientId?.trim();
+  if (cliClientId) {
+    return cliClientId;
+  }
+
+  let registered;
+  try {
+    registered = await client.registerClient(registrationEndpoint, {
+      clientName: CLI_CLIENT_NAME,
+      redirectUris: LOOPBACK_REDIRECT_URIS,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new CliError(`Could not register an OAuth client for anyapi connect: ${detail}`);
+  }
+
+  const clientId = registered.client_id?.trim();
+  if (!clientId) {
+    throw new CliError('OAuth client registration did not return a client_id.');
+  }
+  await mergeConfig({ cliClientId: clientId }, configPath);
+  return clientId;
+}
+
 // resolveEndpoints prefers the RFC 8414 metadata document and falls back to the
 // hardcoded gateway endpoints when discovery fails or omits an endpoint.
 async function resolveEndpoints(client: AnyApiClient): Promise<Endpoints> {
   try {
     const meta = await client.oauthMetadata(OAUTH_METADATA_URL);
     if (meta.authorization_endpoint && meta.token_endpoint) {
-      return { authorizationEndpoint: meta.authorization_endpoint, tokenEndpoint: meta.token_endpoint };
+      return {
+        authorizationEndpoint: meta.authorization_endpoint,
+        tokenEndpoint: meta.token_endpoint,
+        registrationEndpoint: meta.registration_endpoint ?? OAUTH_REGISTER_URL,
+      };
     }
   } catch {
     // Discovery is best-effort; fall through to the hardcoded endpoints.
   }
-  return { authorizationEndpoint: OAUTH_AUTHORIZE_URL, tokenEndpoint: OAUTH_TOKEN_URL };
+  return {
+    authorizationEndpoint: OAUTH_AUTHORIZE_URL,
+    tokenEndpoint: OAUTH_TOKEN_URL,
+    registrationEndpoint: OAUTH_REGISTER_URL,
+  };
 }
 
 interface LoopbackParams {
