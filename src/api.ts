@@ -2,6 +2,7 @@ import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { ApiError } from './errors.js';
 import type {
   CatalogResponse,
+  ClientRegistrationResponse,
   FetchLike,
   OAuthMetadata,
   RunResult,
@@ -49,6 +50,28 @@ export class AnyApiClient {
   // falls back to hardcoded endpoints when discovery fails.
   async oauthMetadata(url: string): Promise<OAuthMetadata> {
     return this.requestJson<OAuthMetadata>(url, undefined, { sanitize: false });
+  }
+
+  // registerClient performs OAuth 2.1 Dynamic Client Registration for a public
+  // client (token_endpoint_auth_method 'none'). The gateway returns an
+  // aa_client_... id the CLI persists and reuses (the endpoint is IP-rate-limited).
+  async registerClient(
+    registrationEndpoint: string,
+    opts: { clientName: string; redirectUris: string[] },
+  ): Promise<ClientRegistrationResponse> {
+    return this.requestJson<ClientRegistrationResponse>(
+      registrationEndpoint,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_name: opts.clientName,
+          redirect_uris: opts.redirectUris,
+          token_endpoint_auth_method: 'none',
+        }),
+      },
+      { sanitize: false },
+    );
   }
 
   // exchangeToken posts to the OAuth token endpoint as a public client (no secret):

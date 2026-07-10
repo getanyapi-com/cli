@@ -9,6 +9,7 @@ export const MCP_URL = `${API_BASE_URL}/mcp`;
 export const OAUTH_METADATA_URL = `${API_BASE_URL}/.well-known/oauth-authorization-server`;
 export const OAUTH_AUTHORIZE_URL = `${API_BASE_URL}/oauth/authorize`;
 export const OAUTH_TOKEN_URL = `${API_BASE_URL}/oauth/token`;
+export const OAUTH_REGISTER_URL = `${API_BASE_URL}/oauth/register`;
 export const OAUTH_SCOPE = 'run balance:read';
 export const API_KEY_ENV = 'ANYAPI_API_KEY';
 export const CONFIG_DIR_NAME = '.anyapi';

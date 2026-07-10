@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1
+
+### Changed
+
+- `anyapi connect` now works from a cold start with no trial key. It resolves the
+  OAuth client id in priority order: the per-trial `clientId` (trial upgrade), else
+  a CLI client previously registered via OAuth 2.1 Dynamic Client Registration
+  (`cliClientId`), else a fresh DCR whose client id is persisted and reused (the
+  registration endpoint is IP-rate-limited). It no longer dead-ends with
+  "run `anyapi init` or `anyapi signup` first"; it only errors if DCR itself fails.
+
 ## 0.3.0
 
 Reframed agent onboarding: self-signup is a free trial, and `anyapi connect`

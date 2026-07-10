@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { connectionConfigFromToken } from '../src/connect.js';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { AnyApiClient } from '../src/api.js';
+import { connectionConfigFromToken, resolveClientId } from '../src/connect.js';
 import { buildAuthorizeUrl, createPkce, randomState } from '../src/pkce.js';
-import type { TokenResponse } from '../src/types.js';
+import type { AnyApiConfig, FetchLike, TokenResponse } from '../src/types.js';
 
 function base64url(input: Buffer): string {
   return input.toString('base64url');
@@ -76,5 +80,84 @@ describe('connectionConfigFromToken', () => {
     const patch = connectionConfigFromToken({ ...token, expires_in: undefined as unknown as number });
     expect(patch.accessTokenExpiresAt).toBeUndefined();
     expect(patch.apiKey).toBe('aa_at_access');
+  });
+});
+
+const REGISTRATION_ENDPOINT = 'https://example.test/oauth/register';
+
+function neverFetch(): FetchLike {
+  return async () => {
+    throw new Error('fetch should not be called');
+  };
+}
+
+function registerFetch(clientId: string, captured: { init?: RequestInit; url?: string | URL }): FetchLike {
+  return async (url, init) => {
+    captured.url = url as string | URL;
+    captured.init = init;
+    return new Response(
+      JSON.stringify({
+        client_id: clientId,
+        client_name: 'AnyAPI CLI',
+        redirect_uris: ['http://127.0.0.1/callback', 'http://localhost/callback'],
+        token_endpoint_auth_method: 'none',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+}
+
+describe('resolveClientId', () => {
+  let tempConfigPath: string;
+
+  async function makeConfigPath(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'anyapi-connect-'));
+    tempConfigPath = join(dir, 'config.json');
+    return tempConfigPath;
+  }
+
+  afterEach(() => {
+    tempConfigPath = '';
+  });
+
+  it('prefers the per-trial clientId and never registers', async () => {
+    const config: AnyApiConfig = { clientId: 'aa_client_trial', cliClientId: 'aa_client_cli' };
+    const client = new AnyApiClient({ fetchImpl: neverFetch() });
+    const configPath = await makeConfigPath();
+
+    const id = await resolveClientId(config, client, REGISTRATION_ENDPOINT, configPath);
+    expect(id).toBe('aa_client_trial');
+  });
+
+  it('reuses a previously registered cliClientId without registering', async () => {
+    const config: AnyApiConfig = { cliClientId: 'aa_client_cli' };
+    const client = new AnyApiClient({ fetchImpl: neverFetch() });
+    const configPath = await makeConfigPath();
+
+    const id = await resolveClientId(config, client, REGISTRATION_ENDPOINT, configPath);
+    expect(id).toBe('aa_client_cli');
+  });
+
+  it('registers via DCR and persists the client id to cliClientId when config is empty', async () => {
+    const captured: { init?: RequestInit; url?: string | URL } = {};
+    const client = new AnyApiClient({ fetchImpl: registerFetch('aa_client_new', captured) });
+    const configPath = await makeConfigPath();
+
+    const id = await resolveClientId({}, client, REGISTRATION_ENDPOINT, configPath);
+    expect(id).toBe('aa_client_new');
+
+    // The registration request is a public-client DCR body with loopback URIs.
+    expect(String(captured.url)).toBe(REGISTRATION_ENDPOINT);
+    expect(captured.init?.method).toBe('POST');
+    const body = JSON.parse(String(captured.init?.body));
+    expect(body).toEqual({
+      client_name: 'AnyAPI CLI',
+      redirect_uris: ['http://127.0.0.1/callback', 'http://localhost/callback'],
+      token_endpoint_auth_method: 'none',
+    });
+
+    // The registered id is persisted so the rate-limited endpoint is hit at most once.
+    const persisted = JSON.parse(await readFile(configPath, 'utf8')) as AnyApiConfig;
+    expect(persisted.cliClientId).toBe('aa_client_new');
   });
 });
