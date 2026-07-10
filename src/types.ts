@@ -36,12 +36,6 @@ export interface CatalogResponse {
   apis: CatalogApi[];
 }
 
-export interface RunOptions {
-  fields?: string;
-  maxItems?: number;
-  summary?: boolean;
-}
-
 export interface RunResult {
   output?: unknown;
   provider?: string;

@@ -41,6 +41,31 @@ export function summarizeRun(result: RunResult, outputPath: string, cwd = proces
   return [`Wrote ${pathText}`, `costUsd: ${cost}`, `items: ${items}`].join('\n');
 }
 
+// stripServerHint removes the server's `hint` field from a run envelope. The hint
+// recommends server-side reshaping, which is the wrong advice for CLI users (local
+// shaping over the saved file is free), so it is dropped from both the saved file
+// and stdout.
+export function stripServerHint(result: RunResult): RunResult {
+  if (!('hint' in result)) {
+    return result;
+  }
+  const { hint, ...rest } = result as RunResult & { hint?: unknown };
+  return rest;
+}
+
+// hintThresholdBytes is the saved-envelope size above which an unshaped run earns a
+// one-line nudge toward free local re-slicing with `anyapi view`.
+const hintThresholdBytes = 8 * 1024;
+
+// localRereadHint returns a nudge to re-slice the saved file for free with
+// `anyapi view`, but only for a large result saved without shape flags.
+export function localRereadHint(result: RunResult, sku: string): string | undefined {
+  if (Buffer.byteLength(JSON.stringify(result)) < hintThresholdBytes) {
+    return undefined;
+  }
+  return `hint: slice this file at no cost: anyapi view --last ${sku} --jq '.data'`;
+}
+
 export function isKeyCapExceeded(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 402) {
     return false;

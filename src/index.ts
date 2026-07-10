@@ -11,6 +11,7 @@ import {
   searchCommand,
   setupSkillsCommand,
   signupCommand,
+  viewCommand,
   type GlobalOptions,
 } from './commands.js';
 import { CliError } from './errors.js';
@@ -23,7 +24,7 @@ program
   .name('anyapi')
   .description('Official CLI for AnyAPI.')
   .option('--api-key <apiKey>', 'AnyAPI API key. Overrides ANYAPI_API_KEY and local config.')
-  .version('0.1.1');
+  .version('0.2.0');
 
 program
   .command('signup')
@@ -58,16 +59,29 @@ program
 
 program
   .command('run')
-  .description('Run an AnyAPI SKU.')
+  .description('Run an AnyAPI SKU. Always saves the full result; shape flags trim only the stdout view.')
   .argument('<sku>', 'API SKU.')
   .option('--input <json>', 'JSON input body.')
   .option('-i, --input-file <file>', 'Read JSON input from a file.')
-  .option('--fields <fields>', 'Comma-separated fields to keep in each result item.')
-  .option('--max-items <count>', 'Maximum number of result items to return.')
-  .option('--summary', 'Return a structural summary instead of bulk data.')
-  .option('-o, --output <path>', 'Output path for the result JSON.')
-  .option('--json', 'Print raw JSON to stdout instead of writing a file.')
+  .option('--jq <expr>', 'Local jq expression over the result output ({found, data}). Applied to stdout only.')
+  .option('--fields <fields>', 'Local: comma-separated fields to keep in each result item (stdout only).')
+  .option('--max-items <count>', 'Local: cap result items shown on stdout (the saved file keeps all).')
+  .option('--summary', 'Local: print a structural summary of the result on stdout.')
+  .option('-o, --output <path>', 'Output path for the full result JSON.')
+  .option('--json', 'Print the (shaped) JSON to stdout instead of writing a file.')
   .action((sku, options) => run(() => runCommand(ctx, globalOptions(), sku, options)));
+
+program
+  .command('view')
+  .description('Re-shape a saved run file locally. Zero network, zero cost.')
+  .argument('[path]', 'Path to a saved run file. Omit to use the newest saved run.')
+  .option('--last [sku]', 'Use the newest saved run (optionally for a specific SKU).')
+  .option('--jq <expr>', 'Local jq expression over the result output ({found, data}).')
+  .option('--fields <fields>', 'Comma-separated fields to keep in each result item.')
+  .option('--max-items <count>', 'Cap the number of result items shown.')
+  .option('--summary', 'Print a structural summary of the result.')
+  .option('--json', 'Print compact JSON instead of pretty JSON.')
+  .action((path, options) => run(() => viewCommand(ctx, path, options)));
 
 program
   .command('balance')
