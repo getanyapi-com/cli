@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AnyApiClient } from '../src/api.js';
 import { ApiError } from '../src/errors.js';
-import { buildRunOutputPath, formatCapExceededMessage, isKeyCapExceeded } from '../src/run.js';
+import { buildRunOutputPath, formatTrialCapMessage, isTrialCapReached } from '../src/run.js';
 import type { FetchLike } from '../src/types.js';
 
 describe('run output paths', () => {
@@ -18,12 +18,12 @@ describe('run output paths', () => {
 });
 
 describe('402 handling', () => {
-  it('detects key cap errors from run responses', async () => {
+  it('detects trial cap errors and relays the server upgrade guidance', async () => {
     const fetchImpl: FetchLike = async () =>
-      new Response(JSON.stringify({ error: 'key_cap_exceeded' }), {
-        status: 402,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      new Response(
+        JSON.stringify({ error: 'trial_cap_reached', message: 'Trial budget used up; run anyapi connect.' }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } },
+      );
     const client = new AnyApiClient({
       apiKey: 'aa_live_test',
       fetchImpl,
@@ -35,10 +35,14 @@ describe('402 handling', () => {
       throw new Error('Expected run to fail');
     } catch (error) {
       expect(error).toBeInstanceOf(ApiError);
-      expect(isKeyCapExceeded(error)).toBe(true);
-      expect(formatCapExceededMessage({ claimUrl: 'https://getanyapi.com/dashboard', claimToken: 'claim' })).toContain(
-        'Claim token: claim',
-      );
+      expect(isTrialCapReached(error)).toBe(true);
+      expect(formatTrialCapMessage(error)).toBe('Trial budget used up; run anyapi connect.');
     }
+  });
+
+  it('falls back to a connect nudge when the 402 body has no message', () => {
+    const error = new ApiError('trial_cap_reached', 402, { error: 'trial_cap_reached' });
+    expect(isTrialCapReached(error)).toBe(true);
+    expect(formatTrialCapMessage(error)).toContain('anyapi connect');
   });
 });

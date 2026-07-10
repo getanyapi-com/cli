@@ -1,7 +1,7 @@
 ---
 name: anyapi-run
 description: |
-  Use this skill whenever the user asks to run AnyAPI, call an AnyAPI SKU, fetch scraping results, save API output for an agent, slice or reshape a saved result with jq/fields/max_items/summary, dig deeper into a result without paying again, avoid flooding context, handle HTTP 402, or read .anyapi files.
+  Use this skill whenever the user asks to run AnyAPI, call an AnyAPI SKU, fetch scraping results, save API output for an agent, slice or reshape a saved result with jq/fields/max_items/summary, dig deeper into a result without paying again, avoid flooding context, handle HTTP 402 trial_cap_reached, or read .anyapi files.
 allowed-tools: [Bash(anyapi *), Bash(npx anyapi-cli *)]
 ---
 
@@ -71,14 +71,16 @@ anyapi view --last --jq '.data.items[:5]'    # pull just what you need
 
 ## 402 handling
 
-If you see `key_cap_exceeded`, run:
+If a run returns HTTP 402 `trial_cap_reached`, the free trial budget is spent
+(no charge was made for the blocked call). To keep going, run:
 
 ```sh
-anyapi claim
+anyapi connect
 ```
 
-Send the claim URL and claim token to the human. They can claim or fund the key,
-then the same key can keep running.
+`anyapi connect` (anyapi-cli >= 0.3.0) prints a single OAuth consent URL. Hand
+that one URL to your human; they approve continued spend and set a limit, then
+the same commands keep working with no key to swap by hand.
 
 ## Tips
 

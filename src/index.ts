@@ -2,7 +2,6 @@
 import { Command } from 'commander';
 import {
   balanceCommand,
-  claimCommand,
   describeCommand,
   initCommand,
   listCommand,
@@ -14,6 +13,7 @@ import {
   viewCommand,
   type GlobalOptions,
 } from './commands.js';
+import { connectCommand } from './connect.js';
 import { CliError } from './errors.js';
 import { defaultContext } from './io.js';
 
@@ -24,12 +24,11 @@ program
   .name('anyapi')
   .description('Official CLI for AnyAPI.')
   .option('--api-key <apiKey>', 'AnyAPI API key. Overrides ANYAPI_API_KEY and local config.')
-  .version('0.2.0');
+  .version('0.3.0');
 
 program
   .command('signup')
-  .description('Create a capped starter AnyAPI key and save it locally.')
-  .option('--email <sponsorEmail>', 'Sponsor email for claim and approval.')
+  .description('Mint a free AnyAPI trial key and save it locally.')
   .option('--label <label>', 'Label for the generated key.')
   .option('--show-key', 'Print the generated secret key once.')
   .action((options) => run(() => signupCommand(ctx, options)));
@@ -89,13 +88,13 @@ program
   .action(() => run(() => balanceCommand(ctx, globalOptions())));
 
 program
-  .command('claim')
-  .description('Print stored claim guidance for a starter key.')
-  .action(() => run(() => claimCommand(ctx)));
+  .command('connect')
+  .description('Upgrade past the free trial via a one-URL OAuth approval (loopback callback).')
+  .action(() => run(() => connectCommand(ctx)));
 
 program
   .command('init')
-  .description('Install bundled skills and show or apply MCP setup.')
+  .description('Mint a free trial key if none exists, install bundled skills, and show or apply MCP setup.')
   .option('--all', 'Target all supported agents, even if not detected.')
   .option('--yes', 'Create missing config and apply supported MCP patches without prompting.')
   .action((options) => run(() => initCommand(ctx, globalOptions(), options)));
@@ -118,7 +117,7 @@ async function run(action: () => Promise<void>): Promise<void> {
     await action();
   } catch (error) {
     if (error instanceof CliError) {
-      if (error.message !== 'key_cap_exceeded') {
+      if (error.message !== 'trial_cap_reached') {
         ctx.stderr.write(`${error.message}\n`);
       }
       process.exitCode = error.exitCode;
