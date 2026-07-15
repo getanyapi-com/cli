@@ -3,78 +3,85 @@ import type {
   CatalogResponse,
   DiscoveryLane,
   DiscoveryPricing,
-  LinearPricingOffer,
   PricingOffer,
   SearchResponse,
 } from './types.js';
 
-// Temporary compatibility boundary for the pre-USD discovery contract. Delete
-// this constant and every legacy* helper after the gateway cutover is complete.
-const LEGACY_CREDITS_PER_USD = 100_000;
-
 export function readCatalogResponse(value: unknown): CatalogResponse {
-  const record = asRecord(value);
-  const apis = Array.isArray(record?.apis) ? record.apis : [];
-  return { apis: apis.map(readDiscoveryApi).filter(isCatalogApi) };
+  const record = requireRecord(value, 'catalog');
+  if (!Array.isArray(record.apis)) {
+    throw contractError('catalog');
+  }
+  return { apis: record.apis.map(readDiscoveryApi) };
 }
 
 export function readSearchResponse(value: unknown): SearchResponse {
-  const record = asRecord(value);
-  const results = Array.isArray(record?.results) ? record.results : [];
+  const record = requireRecord(value, 'search');
+  if (!Array.isArray(record.results)) {
+    throw contractError('search');
+  }
+  const total = finiteNumber(record.total);
+  const ranking = readRanking(record.ranking);
+  if (total === undefined || total < 0 || !Number.isInteger(total) || !ranking) {
+    throw contractError('search');
+  }
+  const results = record.results.map(readDiscoveryApi);
+  if (results.some((result) => result.relevance === undefined)) {
+    throw contractError('search');
+  }
   return {
-    results: results.map(readDiscoveryApi).filter(isCatalogApi),
-    total: finiteNumber(record?.total) ?? results.length,
-    ranking: stringValue(record?.ranking) ?? stringValue(record?.mode) ?? 'keyword',
+    results,
+    total,
+    ranking,
   };
 }
 
-export function readDiscoveryApi(value: unknown): CatalogApi | undefined {
-  const record = asRecord(value);
-  const slug = stringValue(record?.slug);
-  const name = stringValue(record?.name);
-  if (!record || !slug || !name) {
-    return undefined;
+export function readDiscoveryApi(value: unknown): CatalogApi {
+  const record = requireRecord(value, 'API');
+  const slug = stringValue(record.slug);
+  const category = stringValue(record.category);
+  const name = stringValue(record.name);
+  const description = stringValue(record.description);
+  const pricing = readPricing(record.pricing);
+  if (!slug || !category || !name || description === undefined || !pricing) {
+    throw contractError('API');
   }
 
-  const output = sanitizeDiscoveryJson(record) as Record<string, unknown>;
-  const pricing = readPricing(record.pricing) ?? legacyPricing(record);
-  const lanes = readLanes(record.lanes) ?? legacyLanes(record);
-  const relevance = finiteNumber(record.relevance) ?? finiteNumber(record.score);
-
-  delete output.pricing;
-  delete output.lanes;
-  delete output.providers;
-  delete output.score;
-  delete output.mode;
-  delete output.priceUsdPer1k;
-  delete output.priceUsd;
-  delete output.baseUsd;
-  delete output.perItemUsd;
-  delete output.perUnitUsd;
-  delete output.perItemUnit;
-  delete output.quotes;
+  const id = stringValue(record.id);
+  const platformId = stringValue(record.platformId);
+  const lanes = record.lanes === undefined ? undefined : readLanes(record.lanes);
+  const relevance = finiteNumber(record.relevance);
+  const highlightFields = Array.isArray(record.highlightFields)
+    ? sanitizeDiscoveryJson(record.highlightFields)
+    : undefined;
 
   return {
-    ...output,
+    ...(id ? { id } : {}),
+    ...(platformId ? { platformId } : {}),
     slug,
+    category,
     name,
+    description,
     provider: 'AnyAPI',
-    ...(pricing ? { pricing } : {}),
-    ...(lanes && lanes.length > 0 ? { lanes } : {}),
+    pricing,
+    ...(lanes ? { lanes } : {}),
+    ...(hasOwn(record, 'inputSchema') ? { inputSchema: sanitizeDiscoveryJson(record.inputSchema) } : {}),
+    ...(hasOwn(record, 'outputSchema') ? { outputSchema: sanitizeDiscoveryJson(record.outputSchema) } : {}),
+    ...(typeof record.heavy === 'boolean' ? { heavy: record.heavy } : {}),
+    ...(typeof record.tryEligible === 'boolean' ? { tryEligible: record.tryEligible } : {}),
     ...(relevance !== undefined ? { relevance } : {}),
-  } as CatalogApi;
+    ...(highlightFields ? { highlightFields: highlightFields as unknown[] } : {}),
+  };
 }
 
 function readPricing(value: unknown): DiscoveryPricing | undefined {
   const record = asRecord(value);
   const from = readOffer(record?.from);
-  if (!from) {
+  const failoverMaxUsd = finiteNumber(record?.failoverMaxUsd);
+  if (!from || failoverMaxUsd === undefined) {
     return undefined;
   }
-  return {
-    from,
-    failoverMaxUsd: finiteNumber(record?.failoverMaxUsd) ?? from.maxUsd,
-  };
+  return { from, failoverMaxUsd };
 }
 
 function readOffer(value: unknown): PricingOffer | undefined {
@@ -93,108 +100,31 @@ function readOffer(value: unknown): PricingOffer | undefined {
   return undefined;
 }
 
-function readLanes(value: unknown): DiscoveryLane[] | undefined {
+function readLanes(value: unknown): DiscoveryLane[] {
   if (!Array.isArray(value)) {
-    return undefined;
+    throw contractError('API lanes');
   }
-  return value.flatMap((candidate) => {
-    const record = asRecord(candidate);
-    const pricing = readOffer(record?.pricing);
-    if (!record || !pricing) {
-      return [];
+  return value.map((candidate) => {
+    const record = requireRecord(candidate, 'API lane');
+    const pricing = readOffer(record.pricing);
+    if (!pricing) {
+      throw contractError('API lane');
     }
-    const health = readHealth(record.health);
-    return [{ pricing, ...(health ? { health } : {}) }];
+    const health = record.health === undefined ? undefined : readHealth(record.health);
+    return { pricing, ...(health ? { health } : {}) };
   });
 }
 
-function readHealth(value: unknown): DiscoveryLane['health'] | undefined {
-  const record = asRecord(value);
-  const uptimePct = finiteNumber(record?.uptimePct);
-  const latencyP50Ms = finiteNumber(record?.latencyP50Ms);
-  const requests = finiteNumber(record?.requests);
-  if (uptimePct === undefined || latencyP50Ms === undefined || requests === undefined) {
-    return undefined;
-  }
-  return {
-    window: stringValue(record?.window) ?? '30d',
-    uptimePct,
-    latencyP50Ms,
-    requests,
-  };
-}
-
-function legacyPricing(record: Record<string, unknown>): DiscoveryPricing | undefined {
-  const from = legacyOffer(record);
-  if (!from) {
-    return undefined;
-  }
-
-  const laneMax = legacyLanes(record)?.reduce((max, lane) => Math.max(max, lane.pricing.maxUsd), from.maxUsd);
-  const failoverMaxUsd = legacyUsd(record.priceUsd, record.priceCredits) ?? laneMax ?? from.maxUsd;
-  return { from, failoverMaxUsd };
-}
-
-function legacyOffer(record: Record<string, unknown>, fallbackUnit?: string): PricingOffer | undefined {
-  const perThousand = finiteNumber(record.priceUsdPer1k);
-  if (perThousand !== undefined) {
-    return { model: 'flat', unit: 'request', maxUsd: perThousand / 1000 };
-  }
-
-  const maxUsd = legacyUsd(record.priceUsd, record.fromCredits ?? record.priceCredits);
-  const baseUsd = legacyUsd(record.baseUsd, record.baseCredits);
-  const perUnitUsd = legacyUsd(record.perItemUsd ?? record.perUnitUsd, record.perItemCredits);
-  if ((baseUsd ?? 0) > 0 || (perUnitUsd ?? 0) > 0) {
-    const offer: LinearPricingOffer = {
-      model: 'linear',
-      unit: stringValue(record.perItemUnit) ?? fallbackUnit ?? 'result',
-      baseUsd: baseUsd ?? 0,
-      perUnitUsd: perUnitUsd ?? 0,
-      maxUsd: maxUsd ?? baseUsd ?? 0,
-    };
-    return offer;
-  }
-  return maxUsd === undefined ? undefined : { model: 'flat', unit: 'request', maxUsd };
-}
-
-function legacyLanes(record: Record<string, unknown>): DiscoveryLane[] | undefined {
-  if (!Array.isArray(record.quotes)) {
-    return undefined;
-  }
-  const fallbackUnit = stringValue(record.perItemUnit) ?? 'result';
-  return record.quotes.flatMap((candidate) => {
-    const quote = asRecord(candidate);
-    const pricing = quote ? legacyOffer(quote, fallbackUnit) : undefined;
-    if (!quote || !pricing) {
-      return [];
-    }
-    const health = legacyHealth(quote);
-    return [{ pricing, ...(health ? { health } : {}) }];
-  });
-}
-
-function legacyHealth(record: Record<string, unknown>): DiscoveryLane['health'] | undefined {
+function readHealth(value: unknown): DiscoveryLane['health'] {
+  const record = requireRecord(value, 'API lane health');
+  const window = stringValue(record.window);
   const uptimePct = finiteNumber(record.uptimePct);
   const latencyP50Ms = finiteNumber(record.latencyP50Ms);
   const requests = finiteNumber(record.requests);
-  if (uptimePct === undefined && latencyP50Ms === undefined && requests === undefined) {
-    return undefined;
+  if (!window || uptimePct === undefined || latencyP50Ms === undefined || requests === undefined) {
+    throw contractError('API lane health');
   }
-  return {
-    window: '30d',
-    uptimePct: uptimePct ?? 0,
-    latencyP50Ms: latencyP50Ms ?? 0,
-    requests: requests ?? 0,
-  };
-}
-
-function legacyUsd(usd: unknown, credits: unknown): number | undefined {
-  const direct = finiteNumber(usd);
-  if (direct !== undefined) {
-    return direct;
-  }
-  const legacyCredits = finiteNumber(credits);
-  return legacyCredits === undefined ? undefined : legacyCredits / LEGACY_CREDITS_PER_USD;
+  return { window, uptimePct, latencyP50Ms, requests };
 }
 
 function sanitizeDiscoveryJson(value: unknown): unknown {
@@ -220,8 +150,20 @@ function sanitizeDiscoveryJson(value: unknown): unknown {
   return output;
 }
 
-function isCatalogApi(value: CatalogApi | undefined): value is CatalogApi {
-  return value !== undefined;
+function readRanking(value: unknown): SearchResponse['ranking'] | undefined {
+  return value === 'semantic' || value === 'keyword' ? value : undefined;
+}
+
+function requireRecord(value: unknown, subject: string): Record<string, unknown> {
+  const record = asRecord(value);
+  if (!record) {
+    throw contractError(subject);
+  }
+  return record;
+}
+
+function contractError(subject: string): Error {
+  return new Error(`Invalid AnyAPI ${subject} discovery response.`);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -235,5 +177,9 @@ function finiteNumber(value: unknown): number | undefined {
 }
 
 function stringValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
 }

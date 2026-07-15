@@ -8,7 +8,7 @@ export function formatUsd(value: unknown): string {
 }
 
 export function formatCatalogPrice(api: CatalogApi): string {
-  return api.pricing ? formatPricingOffer(api.pricing.from) : 'USD unknown';
+  return formatPricingOffer(api.pricing.from);
 }
 
 export function formatPricingOffer(offer: PricingOffer): string {

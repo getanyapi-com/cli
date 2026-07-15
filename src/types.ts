@@ -94,11 +94,12 @@ export interface DiscoveryLane {
 export interface CatalogApi {
   id?: string;
   slug: string;
-  category?: string;
+  platformId?: string;
+  category: string;
   name: string;
-  description?: string;
+  description: string;
   provider: 'AnyAPI';
-  pricing?: DiscoveryPricing;
+  pricing: DiscoveryPricing;
   lanes?: DiscoveryLane[];
   inputSchema?: unknown;
   outputSchema?: unknown;
@@ -115,7 +116,7 @@ export interface CatalogResponse {
 export interface SearchResponse {
   results: CatalogApi[];
   total: number;
-  ranking: string;
+  ranking: 'semantic' | 'keyword';
 }
 
 export interface RunResult {
