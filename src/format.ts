@@ -1,9 +1,4 @@
-import { CREDIT_TO_USD } from './constants.js';
-import type { CatalogApi } from './types.js';
-
-export function creditsToUsd(value: number): number {
-  return value * CREDIT_TO_USD;
-}
+import type { CatalogApi, PricingOffer } from './types.js';
 
 export function formatUsd(value: unknown): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -13,23 +8,14 @@ export function formatUsd(value: unknown): string {
 }
 
 export function formatCatalogPrice(api: CatalogApi): string {
-  const fromUsd = priceValue(api.priceUsd, api.fromCredits);
-  const baseUsd = priceValue(api.baseUsd, api.baseCredits);
-  const itemUsd = priceValue(api.perItemUsd, api.perItemCredits);
-  const parts: string[] = [];
+  return api.pricing ? formatPricingOffer(api.pricing.from) : 'USD unknown';
+}
 
-  if (fromUsd !== undefined) {
-    parts.push(`from ${formatUsd(fromUsd)}/request`);
+export function formatPricingOffer(offer: PricingOffer): string {
+  if (offer.model === 'flat') {
+    return `from ${formatUsd(offer.maxUsd)}/request`;
   }
-  if (baseUsd !== undefined && baseUsd > 0) {
-    parts.push(`base ${formatUsd(baseUsd)}`);
-  }
-  if (itemUsd !== undefined && itemUsd > 0) {
-    const unit = api.perItemUnit ? `/${api.perItemUnit}` : '/item';
-    parts.push(`${formatUsd(itemUsd)}${unit}`);
-  }
-
-  return parts.length > 0 ? parts.join(', ') : 'USD unknown';
+  return `from ${formatUsd(offer.baseUsd)} + ${formatUsd(offer.perUnitUsd)}/${offer.unit} (max ${formatUsd(offer.maxUsd)}/request)`;
 }
 
 export function printTable(rows: string[][]): string {
@@ -42,22 +28,13 @@ export function printTable(rows: string[][]): string {
     .join('\n');
 }
 
-function priceValue(usdValue: unknown, creditValue: unknown): number | undefined {
-  if (typeof usdValue === 'number' && Number.isFinite(usdValue)) {
-    return usdValue;
-  }
-  if (typeof creditValue === 'number' && Number.isFinite(creditValue)) {
-    return creditsToUsd(creditValue);
-  }
-  return undefined;
-}
-
 function formatUsdNumber(value: number): string {
   if (value === 0) {
     return '0.00';
   }
   if (Math.abs(value) < 1) {
-    return value.toFixed(4);
+    const [whole, fraction = ''] = value.toFixed(6).split('.');
+    return `${whole}.${fraction.replace(/0+$/, '').padEnd(4, '0')}`;
   }
   return value.toFixed(2);
 }

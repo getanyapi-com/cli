@@ -24,7 +24,7 @@ program
   .name('anyapi')
   .description('Official CLI for AnyAPI.')
   .option('--api-key <apiKey>', 'AnyAPI API key. Overrides ANYAPI_API_KEY and local config.')
-  .version('0.3.1');
+  .version('0.3.2');
 
 program
   .command('signup')

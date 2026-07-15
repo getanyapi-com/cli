@@ -1,4 +1,5 @@
 import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
+import { readCatalogResponse, readDiscoveryApi, readSearchResponse } from './discovery.js';
 import { ApiError } from './errors.js';
 import type {
   CatalogResponse,
@@ -6,6 +7,7 @@ import type {
   FetchLike,
   OAuthMetadata,
   RunResult,
+  SearchResponse,
   SignupResponse,
   TokenResponse,
 } from './types.js';
@@ -88,21 +90,38 @@ export class AnyApiClient {
     );
   }
 
-  async catalog(options: { query?: string; category?: string } = {}): Promise<CatalogResponse> {
+  async catalog(options: { category?: string } = {}): Promise<CatalogResponse> {
     const url = new URL(this.catalogUrl);
-    if (options.query) {
-      url.searchParams.set('query', options.query);
-    }
     if (options.category) {
       url.searchParams.set('category', options.category);
     }
-    return this.requestJson<CatalogResponse>(url, undefined, { sanitize: false });
+    const body = await this.requestJson<unknown>(url, undefined, { sanitize: false });
+    return readCatalogResponse(body);
+  }
+
+  async search(options: { query: string; category?: string; platform?: string; limit?: number }): Promise<SearchResponse> {
+    const url = new URL(this.catalogUrl);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/search`;
+    url.search = '';
+    url.searchParams.set('q', options.query);
+    if (options.category) {
+      url.searchParams.set('category', options.category);
+    }
+    if (options.platform) {
+      url.searchParams.set('platform', options.platform);
+    }
+    if (options.limit !== undefined) {
+      url.searchParams.set('limit', String(options.limit));
+    }
+    const body = await this.requestJson<unknown>(url, undefined, { sanitize: false });
+    return readSearchResponse(body);
   }
 
   async describe(sku: string): Promise<unknown> {
-    return this.requestJson<unknown>(`${this.restBaseUrl}/apis/${encodeURIComponent(sku)}`, {
+    const body = await this.requestJson<unknown>(`${this.restBaseUrl}/apis/${encodeURIComponent(sku)}`, {
       headers: this.authHeaders(),
-    });
+    }, { sanitize: false });
+    return readDiscoveryApi(body) ?? sanitizeCustomerJson(body);
   }
 
   // run always fetches the FULL result. Response shaping (fields/max_items/summary/
