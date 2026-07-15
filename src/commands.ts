@@ -61,8 +61,8 @@ export async function loginCommand(ctx: CommandContext, options: { apiKey?: stri
 
 export async function searchCommand(ctx: CommandContext, query: string): Promise<void> {
   const client = new AnyApiClient({ fetchImpl: ctx.fetchImpl });
-  const catalog = await client.catalog({ query });
-  writeCatalogTable(ctx, catalog.apis);
+  const results = await client.search({ query });
+  writeCatalogTable(ctx, results.results);
 }
 
 export async function listCommand(ctx: CommandContext, options: { category?: string }): Promise<void> {

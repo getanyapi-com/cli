@@ -14,4 +14,3 @@ export const OAUTH_SCOPE = 'run balance:read';
 export const API_KEY_ENV = 'ANYAPI_API_KEY';
 export const CONFIG_DIR_NAME = '.anyapi';
 export const CONFIG_FILE_NAME = 'config.json';
-export const CREDIT_TO_USD = 0.00001;

@@ -60,22 +60,62 @@ export interface TokenResponse {
   scope: string;
 }
 
+export interface FlatPricingOffer {
+  model: 'flat';
+  unit: 'request';
+  maxUsd: number;
+}
+
+export interface LinearPricingOffer {
+  model: 'linear';
+  unit: string;
+  baseUsd: number;
+  perUnitUsd: number;
+  maxUsd: number;
+}
+
+export type PricingOffer = FlatPricingOffer | LinearPricingOffer;
+
+export interface DiscoveryPricing {
+  from: PricingOffer;
+  failoverMaxUsd: number;
+}
+
+export interface DiscoveryLane {
+  pricing: PricingOffer;
+  health?: {
+    window: string;
+    uptimePct: number;
+    latencyP50Ms: number;
+    requests: number;
+  };
+}
+
 export interface CatalogApi {
+  id?: string;
   slug: string;
   category?: string;
   name: string;
   description?: string;
-  fromCredits?: number;
-  baseCredits?: number;
-  perItemCredits?: number;
-  priceUsd?: number;
-  baseUsd?: number;
-  perItemUsd?: number;
-  perItemUnit?: string;
+  provider: 'AnyAPI';
+  pricing?: DiscoveryPricing;
+  lanes?: DiscoveryLane[];
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  heavy?: boolean;
+  tryEligible?: boolean;
+  relevance?: number;
+  highlightFields?: unknown[];
 }
 
 export interface CatalogResponse {
   apis: CatalogApi[];
+}
+
+export interface SearchResponse {
+  results: CatalogApi[];
+  total: number;
+  ranking: string;
 }
 
 export interface RunResult {

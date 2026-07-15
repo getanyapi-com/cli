@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+
+### Changed
+
+- `anyapi search` now uses the dedicated ranked catalog search endpoint.
+- Discovery responses are normalized to AnyAPI-branded, nested USD pricing. This
+  bridge release reads both the current credit-based contract and its replacement
+  so it remains compatible across the gateway cutover.
+
 ## 0.3.1
 
 ### Changed
