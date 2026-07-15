@@ -34,6 +34,8 @@ Search and list are public. Describe is authenticated because it returns the ful
 - `anyapi search <query>` uses the dedicated ranked discovery search.
 - `anyapi list --category <cat>` narrows by category.
 - `anyapi describe <sku>` prints input schema, output schema, and USD pricing.
+- Discovery pricing is always nested under `pricing`; ranked search reports
+  `relevance` per result and `ranking` for the response.
 
 ## Tips
 

@@ -2,6 +2,7 @@ import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { readCatalogResponse, readDiscoveryApi, readSearchResponse } from './discovery.js';
 import { ApiError } from './errors.js';
 import type {
+  CatalogApi,
   CatalogResponse,
   ClientRegistrationResponse,
   FetchLike,
@@ -117,11 +118,11 @@ export class AnyApiClient {
     return readSearchResponse(body);
   }
 
-  async describe(sku: string): Promise<unknown> {
+  async describe(sku: string): Promise<CatalogApi> {
     const body = await this.requestJson<unknown>(`${this.restBaseUrl}/apis/${encodeURIComponent(sku)}`, {
       headers: this.authHeaders(),
     }, { sanitize: false });
-    return readDiscoveryApi(body) ?? sanitizeCustomerJson(body);
+    return readDiscoveryApi(body);
   }
 
   // run always fetches the FULL result. Response shaping (fields/max_items/summary/

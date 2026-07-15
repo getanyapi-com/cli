@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3
+
+### Changed
+
+- Discovery now accepts only the customer-safe contract: AnyAPI branding,
+  nested USD pricing, `relevance`, and `ranking`.
+
+### Removed
+
+- Removed the temporary 0.3.2 compatibility reader for credit-based catalog
+  responses and the former search field aliases.
+
 ## 0.3.2
 
 ### Changed
