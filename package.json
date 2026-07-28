@@ -1,6 +1,6 @@
 {
   "name": "anyapi-cli",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Official CLI for AnyAPI, a unified marketplace for scraping and data APIs.",
   "type": "module",
   "bin": {
