@@ -50,13 +50,13 @@ export class AnyApiClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }, { sanitize: false });
+    });
   }
 
   // oauthMetadata fetches the RFC 8414 authorization-server document. The caller
   // falls back to hardcoded endpoints when discovery fails.
   async oauthMetadata(url: string): Promise<OAuthMetadata> {
-    return this.requestJson<OAuthMetadata>(url, undefined, { sanitize: false });
+    return this.requestJson<OAuthMetadata>(url);
   }
 
   // registerClient performs OAuth 2.1 Dynamic Client Registration for a public
@@ -77,7 +77,6 @@ export class AnyApiClient {
           token_endpoint_auth_method: 'none',
         }),
       },
-      { sanitize: false },
     );
   }
 
@@ -91,7 +90,6 @@ export class AnyApiClient {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams(params).toString(),
       },
-      { sanitize: false },
     );
   }
 
@@ -100,7 +98,7 @@ export class AnyApiClient {
     if (options.category) {
       url.searchParams.set('category', options.category);
     }
-    const body = await this.requestJson<unknown>(url, undefined, { sanitize: false });
+    const body = await this.requestJson<unknown>(url);
     return readCatalogResponse(body);
   }
 
@@ -118,14 +116,14 @@ export class AnyApiClient {
     if (options.limit !== undefined) {
       url.searchParams.set('limit', String(options.limit));
     }
-    const body = await this.requestJson<unknown>(url, undefined, { sanitize: false });
+    const body = await this.requestJson<unknown>(url);
     return readSearchResponse(body);
   }
 
   async describe(sku: string): Promise<CatalogApi> {
     const body = await this.requestJson<unknown>(`${this.restBaseUrl}/apis/${encodeURIComponent(sku)}`, {
       headers: this.authHeaders(),
-    }, { sanitize: false });
+    });
     return readDiscoveryApi(body);
   }
 
@@ -158,42 +156,14 @@ export class AnyApiClient {
   private async requestJson<T>(
     input: string | URL,
     init?: RequestInit,
-    options: { sanitize?: boolean } = {},
   ): Promise<T> {
     const response = await this.fetchImpl(input, init);
     const body = await parseBody(response);
     if (!response.ok) {
       throw new ApiError(errorMessage(body, response.status), response.status, body);
     }
-    return (options.sanitize === false ? body : sanitizeCustomerJson(body)) as T;
+    return body as T;
   }
-}
-
-export function sanitizeCustomerJson(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeCustomerJson(item));
-  }
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  const output: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    const lower = key.toLowerCase();
-    if (lower.includes('credit')) {
-      continue;
-    }
-    if (lower === 'provider') {
-      output[key] = 'AnyAPI';
-      continue;
-    }
-    if (lower === 'providers') {
-      output[key] = ['AnyAPI'];
-      continue;
-    }
-    output[key] = sanitizeCustomerJson(child);
-  }
-  return output;
 }
 
 function compactObject(input: Record<string, string | undefined>): Record<string, string> {

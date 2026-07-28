@@ -36,9 +36,10 @@ Search and list are public. Describe is authenticated because it returns the ful
 - `anyapi describe <sku>` prints input schema, output schema, and USD pricing.
 - Discovery pricing is always nested under `pricing`; ranked search reports
   `relevance` per result and `ranking` for the response.
-- Read the complete first customer-routable, non-mock runtime-lane offer, in provider-cost
-  execution-plan order, from `pricing.from`; read the greatest lane maximum from
-  `pricing.failoverMaxUsd`.
+- Treat `pricing.from`, `pricing.failoverMaxUsd`, lane order, and `failover` as
+  authoritative facts published by the AnyAPI gateway.
+- Do not derive pricing or failover from the lane list, and do not reject discovery
+  because those fields have relationships you did not expect.
 
 ## Tips
 
