@@ -25,6 +25,10 @@ export interface SignupOptions {
   label?: string;
 }
 
+export interface RunOptions {
+  idempotencyKey?: string;
+}
+
 export class AnyApiClient {
   private readonly apiKey?: string;
   private readonly fetchImpl: FetchLike;
@@ -128,11 +132,15 @@ export class AnyApiClient {
   // run always fetches the FULL result. Response shaping (fields/max_items/summary/
   // jq) is done locally by the CLI over the saved file, so re-slicing a paid run
   // costs nothing; no shape params are sent upstream.
-  async run(sku: string, input: unknown): Promise<RunResult> {
+  async run(sku: string, input: unknown, options: RunOptions = {}): Promise<RunResult> {
     const url = new URL(`${this.restBaseUrl}/run/${encodeURIComponent(sku)}`);
     return this.requestJson<RunResult>(url, {
       method: 'POST',
-      headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+      headers: {
+        ...this.authHeaders(),
+        'Content-Type': 'application/json',
+        ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+      },
       body: JSON.stringify(input),
     });
   }

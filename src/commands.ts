@@ -9,10 +9,12 @@ import { resolveApiKey } from './auth.js';
 import { formatCatalogPrice, formatUsd, printTable } from './format.js';
 import {
   buildRunOutputPath,
+  formatIdempotencyError,
   formatTrialCapMessage,
   isTrialCapReached,
   localRereadHint,
   parseRunInput,
+  prepareRunIdempotency,
   stripServerHint,
   summarizeRun,
   writeRunOutput,
@@ -81,17 +83,30 @@ export async function runCommand(
   ctx: CommandContext,
   global: GlobalOptions,
   sku: string,
-  options: ShapeCliOptions & { input?: string; inputFile?: string; output?: string; json?: boolean },
+  options: ShapeCliOptions & {
+    input?: string;
+    inputFile?: string;
+    idempotencyKey?: string;
+    output?: string;
+    json?: boolean;
+  },
 ): Promise<void> {
   const auth = await requireApiKey(ctx, global);
   const client = new AnyApiClient({ apiKey: auth.apiKey, fetchImpl: ctx.fetchImpl });
   const input = await parseRunInput(options);
+  const prepared = prepareRunIdempotency(sku, input, options.idempotencyKey);
   const shape = parseShapeRequest(options);
 
   let result: RunResult;
   try {
-    result = stripServerHint(await client.run(sku, input));
+    result = stripServerHint(await client.run(sku, prepared.input, {
+      idempotencyKey: prepared.idempotencyKey,
+    }));
   } catch (error) {
+    const idempotencyMessage = formatIdempotencyError(error);
+    if (idempotencyMessage) {
+      throw new CliError(idempotencyMessage);
+    }
     if (isTrialCapReached(error)) {
       writeLine(ctx.stderr, formatTrialCapMessage(error));
       throw new CliError('trial_cap_reached');

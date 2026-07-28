@@ -26,6 +26,7 @@ describe('bundled agent skills', () => {
 
     const run = readSkill('anyapi-run');
     expect(run).toContain('anyapi run reddit.search --input');
+    expect(run).toContain('--idempotency-key auto');
     expect(run).toContain('anyapi view --last');
     expect(run).toContain('costUsd');
   });
