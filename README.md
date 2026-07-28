@@ -34,7 +34,7 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi login --api-key aa_live_...` - store an existing dashboard key locally.
 - `anyapi search <query>` - search the public catalog and print SKU, name, and USD price terms.
 - `anyapi list [--category <cat>]` - list catalog APIs.
-- `anyapi describe <sku>` - print the authenticated API definition, including schemas and USD pricing.
+- `anyapi describe <sku>` - print the authenticated API definition, including opaque schemas and gateway-published USD pricing, lane order, and failover metadata.
 - `anyapi run <sku> [--input '<json>'] [-i file] [--idempotency-key <key>] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [-o path] [--json]` - run an API. Always saves the full result; shape flags trim only the stdout view.
 - `anyapi view [path] [--last [sku]] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [--json]` - re-shape a saved run file locally. Zero network, zero cost.
 - `anyapi balance` - print the remaining USD balance.
@@ -42,6 +42,19 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi setup skills` - install only the bundled skills.
 
 Auth resolution order is `--api-key`, then `ANYAPI_API_KEY`, then `~/.anyapi/config.json`, then trial self-signup. When the trial budget is spent, runs return HTTP 402 `trial_cap_reached`; run `anyapi connect` to continue.
+
+## Gateway and CLI responsibilities
+
+The AnyAPI gateway owns input validation, provider normalization, pricing, lane order,
+routing, failover, and billing. The CLI is a thin transport and presentation adapter:
+it reads the known discovery fields it displays, tolerates safe additive discovery
+fields, and preserves input/output schemas as opaque JSON. In particular,
+`pricing.from`, `pricing.failoverMaxUsd`, and `failover` are authoritative gateway
+facts; the CLI does not recompute them from `lanes`.
+
+Successful `run` payloads are customer data and pass through unchanged. Fields such
+as `creditScore`, `provider`, or `providers` inside a SKU's output are not discovery
+metadata and are never recursively removed or rewritten by the CLI.
 
 ## Run idempotency
 
@@ -86,4 +99,6 @@ Migration note: shape flags used to be sent to the server and trimmed the saved 
 
 ## Publish
 
-Tags matching `v*` publish to npm through GitHub Actions using the `NPM_TOKEN` secret and npm provenance.
+Tags matching `v*` run the compiled CLI against the live credentialless discovery
+endpoints, then publish to npm through GitHub Actions using the `NPM_TOKEN` secret
+and npm provenance.

@@ -105,6 +105,8 @@ export interface CatalogApi {
   outputSchema?: unknown;
   heavy?: boolean;
   tryEligible?: boolean;
+  failover?: boolean;
+  excludesCallerDelay?: boolean;
   relevance?: number;
   highlightFields?: unknown[];
 }

@@ -16,6 +16,48 @@ import type { CommandContext } from '../src/io.js';
 import type { FetchLike } from '../src/types.js';
 
 describe('run idempotency', () => {
+  it('preserves customer output fields without recursive rewriting', async () => {
+    const responseBody = {
+      output: {
+        found: true,
+        data: {
+          creditScore: 812,
+          provider: 'source named by the customer API',
+          providers: ['first source', 'second source'],
+          nested: { provider: { name: 'structured provider value' } },
+        },
+      },
+      provider: 'AnyAPI',
+      costUsd: 0.01,
+      items: 1,
+    };
+    const ctx = commandContext(async () => Response.json(responseBody));
+
+    await runCommand(ctx, { apiKey: 'aa_live_test' }, 'finance.profile', {
+      input: '{}',
+      json: true,
+    });
+
+    const stdout = ctx.stdout.read()?.toString().trim();
+    expect(JSON.parse(stdout)).toEqual(responseBody);
+  });
+
+  it('preserves balance response fields without recursive rewriting', async () => {
+    const responseBody = {
+      balanceUsd: 1.25,
+      creditScore: 812,
+      provider: 'account-data-source',
+      providers: ['account-data-source'],
+    };
+    const client = new AnyApiClient({
+      apiKey: 'aa_live_test',
+      fetchImpl: async () => Response.json(responseBody),
+      restBaseUrl: 'https://example.test/v1',
+    });
+
+    await expect(client.balance()).resolves.toEqual(responseBody);
+  });
+
   it('passes the command flag through to the idempotency key header', async () => {
     let requestInit: RequestInit | undefined;
     const fetchImpl: FetchLike = async (_input, init) => {

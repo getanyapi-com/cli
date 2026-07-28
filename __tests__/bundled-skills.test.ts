@@ -18,6 +18,8 @@ describe('bundled agent skills', () => {
     expect(discover).toContain('nested under `pricing`');
     expect(discover).toContain('`pricing.from`');
     expect(discover).toContain('`pricing.failoverMaxUsd`');
+    expect(discover).toContain('`failover`');
+    expect(discover).toContain('Do not derive');
 
     const onboarding = readSkill('anyapi-onboarding');
     expect(onboarding).toContain('npx -y anyapi-cli@latest init');
