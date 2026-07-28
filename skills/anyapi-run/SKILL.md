@@ -27,6 +27,19 @@ Default output goes to:
 The command prints the path, `costUsd`, and item count. Use the file path as
 context instead of pasting large JSON into chat.
 
+## Avoid accidental duplicate charges
+
+When a run may need to be repeated, pass a stable key:
+
+```sh
+anyapi run reddit.search --input '{"query":"anyapi"}' --idempotency-key task-123
+```
+
+Repeating the same request with the same key returns its original result without
+another charge. Use `--idempotency-key auto` to derive an opt-in daily key from
+the SKU and canonical JSON input. Omit the flag when repeated runs are
+intentional.
+
 ## Run once, reshape forever at zero cost
 
 Shaping is LOCAL. The saved file is always the full result, so you pay once and

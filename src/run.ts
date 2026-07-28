@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { ApiError, CliError } from './errors.js';
@@ -20,6 +21,29 @@ export async function parseRunInput(options: ParseInputOptions): Promise<unknown
     return parseJson(options.input, '--input');
   }
   return {};
+}
+
+export function prepareRunIdempotency(
+  sku: string,
+  input: unknown,
+  option: string | undefined,
+  date = new Date(),
+): { input: unknown; idempotencyKey?: string } {
+  if (option === undefined) {
+    return { input };
+  }
+  if (option === 'auto') {
+    const canonicalInput = canonicalizeJson(input);
+    const dayBucket = date.toISOString().slice(0, 10);
+    const digest = createHash('sha256')
+      .update(JSON.stringify([sku, canonicalInput, dayBucket]))
+      .digest('hex');
+    return { input: canonicalInput, idempotencyKey: `anyapi-auto-${digest}` };
+  }
+  if (option.length === 0 || Buffer.byteLength(option, 'utf8') > 255 || /[^\x21-\x7e]/.test(option)) {
+    throw new CliError('--idempotency-key must be 1 to 255 visible ASCII characters.');
+  }
+  return { input, idempotencyKey: option };
 }
 
 export function buildRunOutputPath(sku: string, date = new Date(), cwd = process.cwd()): string {
@@ -93,11 +117,39 @@ export function formatTrialCapMessage(error: unknown): string {
   ].join('\n');
 }
 
+export function formatIdempotencyError(error: unknown): string | undefined {
+  if (!(error instanceof ApiError) || error.status !== 409 || !isRecord(error.body)) {
+    return undefined;
+  }
+  switch (error.body.code) {
+    case 'idempotency_conflict':
+      return 'This idempotency key was already used for a different request. Use a new key, or retry with the original SKU and input.';
+    case 'idempotency_in_progress':
+      return 'The original request for this idempotency key is still running. Retry shortly with the same key.';
+    default:
+      return undefined;
+  }
+}
+
 function trialCapServerMessage(error: unknown): string | undefined {
   if (error instanceof ApiError && isRecord(error.body) && typeof error.body.message === 'string' && error.body.message.length > 0) {
     return error.body.message;
   }
   return undefined;
+}
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalizeJson(item));
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalizeJson(value[key])]),
+  );
 }
 
 function parseJson(raw: string, source: string): unknown {

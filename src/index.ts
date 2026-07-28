@@ -62,6 +62,7 @@ program
   .argument('<sku>', 'API SKU.')
   .option('--input <json>', 'JSON input body.')
   .option('-i, --input-file <file>', 'Read JSON input from a file.')
+  .option('--idempotency-key <key>', 'Deduplicate this run with an explicit key, or use "auto" for a daily input-derived key.')
   .option('--jq <expr>', 'Local jq expression over the result output ({found, data}). Applied to stdout only.')
   .option('--fields <fields>', 'Local: comma-separated fields to keep in each result item (stdout only).')
   .option('--max-items <count>', 'Local: cap result items shown on stdout (the saved file keeps all).')

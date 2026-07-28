@@ -35,13 +35,31 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi search <query>` - search the public catalog and print SKU, name, and USD price terms.
 - `anyapi list [--category <cat>]` - list catalog APIs.
 - `anyapi describe <sku>` - print the authenticated API definition, including schemas and USD pricing.
-- `anyapi run <sku> [--input '<json>'] [-i file] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [-o path] [--json]` - run an API. Always saves the full result; shape flags trim only the stdout view.
+- `anyapi run <sku> [--input '<json>'] [-i file] [--idempotency-key <key>] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [-o path] [--json]` - run an API. Always saves the full result; shape flags trim only the stdout view.
 - `anyapi view [path] [--last [sku]] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [--json]` - re-shape a saved run file locally. Zero network, zero cost.
 - `anyapi balance` - print the remaining USD balance.
 - `anyapi init [--all] [--yes]` - mint a trial key if none exists, install bundled agent skills, and show or apply MCP setup snippets.
 - `anyapi setup skills` - install only the bundled skills.
 
 Auth resolution order is `--api-key`, then `ANYAPI_API_KEY`, then `~/.anyapi/config.json`, then trial self-signup. When the trial budget is spent, runs return HTTP 402 `trial_cap_reached`; run `anyapi connect` to continue.
+
+## Run idempotency
+
+Use an explicit idempotency key when a run may need to be repeated without another charge:
+
+```sh
+anyapi run reddit.search --input '{"query":"anyapi"}' --idempotency-key k1
+```
+
+Repeating the same request with the same key returns the original result without another charge once the gateway supports idempotency. Keys must be 1 to 255 visible ASCII characters. The CLI does not generate a key unless you explicitly opt in with `auto`:
+
+```sh
+anyapi run reddit.search --input '{"query":"anyapi"}' --idempotency-key auto
+```
+
+`auto` derives a deterministic key from the SKU, canonical JSON input, and current UTC date. Equivalent JSON formatting and property order produce the same key and request body during that day. Use `auto` to protect against accidental same-day reruns, but omit it when repeated runs are intentional.
+
+If a key is already running, the CLI asks you to retry shortly with the same key. If a key was used with a different SKU or input, the CLI asks you to use a new key or retry the original request.
 
 ## Run output and local shaping
 
