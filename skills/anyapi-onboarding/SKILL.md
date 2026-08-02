@@ -44,7 +44,26 @@ anyapi connect
 
 `anyapi connect` (anyapi-cli >= 0.3.0) starts an OAuth flow with a localhost callback and prints a single consent URL. Hand that one URL to your human. They sign in or sign up, see a receipt of what you accomplished on the trial, set a spend limit, and approve. The CLI then holds the access token and keeps working - there is no key to swap by hand.
 
-## Dashboard key (secondary path)
+Use `connect` specifically to upgrade and continue a trial. It preserves the
+trial receipt and uses Authorization Code + PKCE with a loopback callback.
+
+## Immediate account sign-in (cross-device)
+
+To sign in to an AnyAPI account immediately instead of starting or upgrading a
+trial, run:
+
+```sh
+anyapi login
+```
+
+The CLI starts the OAuth device flow: it prints a verification URL and user code,
+opens the complete URL when possible, and waits for approval. The human can use
+any browser or device; the CLI does not bind a localhost callback. On approval,
+the account-backed access and refresh tokens are saved to
+`~/.anyapi/config.json`; the CLI refreshes the account session automatically
+before the access token expires.
+
+## Dashboard key (manual compatibility path)
 
 A human who is already signed in at https://getanyapi.com can create a full, non-expiring key at https://getanyapi.com/dashboard/keys and hand it to you:
 

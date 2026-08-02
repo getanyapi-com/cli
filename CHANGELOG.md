@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 - 2026-08-02
+
+### Added
+
+- `anyapi login` now starts the RFC 8628 OAuth device flow when no manual key is
+  supplied. It prints the verification URL and user code, opens the complete URL
+  best-effort, follows the server polling interval and `slow_down`, and stores the
+  same access token, refresh token, expiry, and scope fields as `anyapi connect`.
+  Account sessions refresh automatically before the one-hour access token expires.
+
+### Changed
+
+- `anyapi login --api-key aa_live_...` remains the manual-key compatibility path
+  and clears any unrelated OAuth or trial state before selecting that key.
+- `login` is the immediate cross-device account sign-in path; `connect` remains
+  the Authorization Code + PKCE loopback path for upgrading a free trial.
+
 ## 0.3.3
 
 ### Changed
