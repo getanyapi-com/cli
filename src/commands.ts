@@ -23,6 +23,7 @@ import { hasShapeFlags, shapeAndJq, type ShapeRequest } from './shape.js';
 import { resolveLastFile } from './view.js';
 import { configureMcp, detectAgents, installSkillsForAgents, printAgentDetection } from './init.js';
 import { promptYesNo, writeLine, type CommandContext } from './io.js';
+import { deviceLoginCommand, type DeviceLoginDependencies } from './login.js';
 import type { AnyApiConfig, CatalogApi, RunResult, SignupResponse } from './types.js';
 
 interface ShapeCliOptions {
@@ -53,11 +54,27 @@ export async function signupCommand(ctx: CommandContext, options: { label?: stri
   }
 }
 
-export async function loginCommand(ctx: CommandContext, options: { apiKey?: string }): Promise<void> {
+export async function loginCommand(
+  ctx: CommandContext,
+  options: { apiKey?: string },
+  dependencies: DeviceLoginDependencies = {},
+): Promise<void> {
   if (!options.apiKey) {
-    throw new CliError('Missing --api-key aa_live_...');
+    await deviceLoginCommand(ctx, dependencies);
+    return;
   }
-  await mergeConfig({ apiKey: options.apiKey }, getConfigPath(ctx.homeDir));
+  await mergeConfig({
+    apiKey: options.apiKey,
+    refreshToken: undefined,
+    accessTokenExpiresAt: undefined,
+    oauthClientId: undefined,
+    scope: undefined,
+    keyId: undefined,
+    capUsd: undefined,
+    expiresAt: undefined,
+    verificationStatus: undefined,
+    clientId: undefined,
+  }, getConfigPath(ctx.homeDir));
   writeLine(ctx.stdout, 'AnyAPI key saved to ~/.anyapi/config.json.');
 }
 
@@ -165,7 +182,12 @@ export async function balanceCommand(ctx: CommandContext, global: GlobalOptions)
 }
 
 export async function initCommand(ctx: CommandContext, global: GlobalOptions, options: { all?: boolean; yes?: boolean }): Promise<void> {
-  const auth = await resolveApiKey({ apiKey: global.apiKey, env: ctx.env, configPath: getConfigPath(ctx.homeDir) });
+  const auth = await resolveApiKey({
+    apiKey: global.apiKey,
+    env: ctx.env,
+    configPath: getConfigPath(ctx.homeDir),
+    fetchImpl: ctx.fetchImpl,
+  });
   if (auth.source === 'missing') {
     await maybeSignup(ctx, true);
   }
@@ -199,7 +221,12 @@ export async function setupSkillsCommand(ctx: CommandContext, options: { all?: b
 }
 
 async function requireApiKey(ctx: CommandContext, global: GlobalOptions): Promise<{ apiKey: string; config: AnyApiConfig }> {
-  const auth = await resolveApiKey({ apiKey: global.apiKey, env: ctx.env, configPath: getConfigPath(ctx.homeDir) });
+  const auth = await resolveApiKey({
+    apiKey: global.apiKey,
+    env: ctx.env,
+    configPath: getConfigPath(ctx.homeDir),
+    fetchImpl: ctx.fetchImpl,
+  });
   if (auth.apiKey) {
     return { apiKey: auth.apiKey, config: auth.config };
   }
@@ -235,6 +262,10 @@ async function saveSignup(ctx: CommandContext, signup: SignupResponse): Promise<
       clientId: signup.clientId,
       expiresAt: signup.expiresAt,
       verificationStatus: signup.verificationStatus,
+      refreshToken: undefined,
+      accessTokenExpiresAt: undefined,
+      oauthClientId: undefined,
+      scope: undefined,
     },
     getConfigPath(ctx.homeDir),
   );

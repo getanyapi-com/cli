@@ -5,6 +5,13 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AnyApiClient } from '../src/api.js';
 import { connectionConfigFromToken, resolveClientId } from '../src/connect.js';
+import {
+  OAUTH_AUTHORIZE_URL,
+  OAUTH_DEVICE_AUTHORIZATION_URL,
+  OAUTH_REGISTER_URL,
+  OAUTH_TOKEN_URL,
+} from '../src/constants.js';
+import { resolveOAuthEndpoints } from '../src/oauth.js';
 import { buildAuthorizeUrl, createPkce, randomState } from '../src/pkce.js';
 import type { AnyApiConfig, FetchLike, TokenResponse } from '../src/types.js';
 
@@ -68,18 +75,52 @@ describe('connectionConfigFromToken', () => {
 
   it('maps the access token onto apiKey and stores the refresh fields', () => {
     const now = new Date('2026-07-10T00:00:00.000Z');
-    expect(connectionConfigFromToken(token, now)).toEqual({
+    expect(connectionConfigFromToken(token, now, 'aa_client_active')).toEqual({
       apiKey: 'aa_at_access',
       refreshToken: 'aa_rt_refresh',
+      oauthClientId: 'aa_client_active',
       scope: 'run balance:read',
       accessTokenExpiresAt: '2026-07-10T01:00:00.000Z',
     });
   });
 
   it('omits the expiry when expires_in is missing', () => {
-    const patch = connectionConfigFromToken({ ...token, expires_in: undefined as unknown as number });
-    expect(patch.accessTokenExpiresAt).toBeUndefined();
-    expect(patch.apiKey).toBe('aa_at_access');
+    expect(() => connectionConfigFromToken({ ...token, expires_in: undefined as unknown as number }))
+      .toThrow('invalid response');
+  });
+
+  it('rejects a non-Bearer or empty access token response', () => {
+    expect(() => connectionConfigFromToken({ ...token, token_type: 'MAC' })).toThrow('invalid response');
+    expect(() => connectionConfigFromToken({ ...token, access_token: '' })).toThrow('invalid response');
+  });
+});
+
+describe('OAuth endpoint discovery', () => {
+  it('uses endpoint-specific fallbacks when optional metadata fields are omitted', async () => {
+    const client = new AnyApiClient({
+      fetchImpl: async () => Response.json({
+        authorization_endpoint: 'https://auth.example.test/authorize',
+        token_endpoint: 'https://auth.example.test/token',
+      }),
+    });
+
+    await expect(resolveOAuthEndpoints(client)).resolves.toEqual({
+      authorizationEndpoint: 'https://auth.example.test/authorize',
+      deviceAuthorizationEndpoint: OAUTH_DEVICE_AUTHORIZATION_URL,
+      tokenEndpoint: 'https://auth.example.test/token',
+      registrationEndpoint: OAUTH_REGISTER_URL,
+    });
+  });
+
+  it('uses all hardcoded endpoints when metadata discovery fails', async () => {
+    const client = new AnyApiClient({ fetchImpl: async () => { throw new Error('offline'); } });
+
+    await expect(resolveOAuthEndpoints(client)).resolves.toEqual({
+      authorizationEndpoint: OAUTH_AUTHORIZE_URL,
+      deviceAuthorizationEndpoint: OAUTH_DEVICE_AUTHORIZATION_URL,
+      tokenEndpoint: OAUTH_TOKEN_URL,
+      registrationEndpoint: OAUTH_REGISTER_URL,
+    });
   });
 });
 
@@ -159,5 +200,24 @@ describe('resolveClientId', () => {
     // The registered id is persisted so the rate-limited endpoint is hit at most once.
     const persisted = JSON.parse(await readFile(configPath, 'utf8')) as AnyApiConfig;
     expect(persisted.cliClientId).toBe('aa_client_new');
+  });
+
+  it('wraps DCR failures with the command context', async () => {
+    const client = new AnyApiClient({
+      fetchImpl: async () => new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429 }),
+    });
+    const configPath = await makeConfigPath();
+
+    await expect(resolveClientId({}, client, REGISTRATION_ENDPOINT, configPath, {
+      commandName: 'anyapi login',
+    })).rejects.toThrow('Could not register an OAuth client for anyapi login: rate_limited');
+  });
+
+  it('rejects a successful DCR response with an empty client id', async () => {
+    const client = new AnyApiClient({ fetchImpl: async () => Response.json({ client_id: '  ' }) });
+    const configPath = await makeConfigPath();
+
+    await expect(resolveClientId({}, client, REGISTRATION_ENDPOINT, configPath))
+      .rejects.toThrow('did not return a client_id');
   });
 });

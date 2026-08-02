@@ -1,33 +1,22 @@
-import { execFile } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { AnyApiClient } from './api.js';
 import { getConfigPath, mergeConfig, readConfig } from './config.js';
-import {
-  OAUTH_AUTHORIZE_URL,
-  OAUTH_METADATA_URL,
-  OAUTH_REGISTER_URL,
-  OAUTH_SCOPE,
-  OAUTH_TOKEN_URL,
-} from './constants.js';
+import { OAUTH_SCOPE } from './constants.js';
 import { CliError } from './errors.js';
 import { writeLine, type CommandContext } from './io.js';
+import {
+  connectionConfigFromToken,
+  openBrowser,
+  resolveClientId,
+  resolveOAuthEndpoints,
+} from './oauth.js';
 import { buildAuthorizeUrl, createPkce, randomState } from './pkce.js';
-import type { AnyApiConfig, TokenResponse } from './types.js';
+import type { TokenResponse } from './types.js';
+
+export { connectionConfigFromToken, resolveClientId } from './oauth.js';
 
 const CALLBACK_PATH = '/callback';
 const CONNECT_TIMEOUT_MS = 5 * 60 * 1000;
-const CLI_CLIENT_NAME = 'AnyAPI CLI';
-// Portless loopback redirect URIs registered for the CLI's public client. The
-// server matches ports flexibly at authorize time, so registering portless is
-// correct and lets each run bind an ephemeral loopback port.
-const LOOPBACK_REDIRECT_URIS = ['http://127.0.0.1/callback', 'http://localhost/callback'];
-
-interface Endpoints {
-  authorizationEndpoint: string;
-  tokenEndpoint: string;
-  registrationEndpoint: string;
-}
-
 // connectCommand connects an AnyAPI wallet with a one-URL OAuth 2.1 Authorization
 // Code + PKCE approval over a loopback callback. It resolves an OAuth client id
 // (trial client, a previously registered CLI client, or a fresh Dynamic Client
@@ -38,8 +27,11 @@ export async function connectCommand(ctx: CommandContext): Promise<void> {
   const config = await readConfig(configPath);
 
   const client = new AnyApiClient({ fetchImpl: ctx.fetchImpl });
-  const endpoints = await resolveEndpoints(client);
-  const clientId = await resolveClientId(config, client, endpoints.registrationEndpoint, configPath);
+  const endpoints = await resolveOAuthEndpoints(client);
+  const clientId = await resolveClientId(config, client, endpoints.registrationEndpoint, configPath, {
+    includeTrialClient: true,
+    commandName: 'anyapi connect',
+  });
   const pkce = createPkce();
   const state = randomState();
 
@@ -58,83 +50,8 @@ export async function connectCommand(ctx: CommandContext): Promise<void> {
     code_verifier: pkce.verifier,
   });
 
-  await mergeConfig(connectionConfigFromToken(token), configPath);
+  await mergeConfig(connectionConfigFromToken(token, new Date(), clientId), configPath);
   printConnected(ctx, token);
-}
-
-// connectionConfigFromToken maps a token response onto the config patch. The
-// access token becomes the active apiKey (used as Authorization: Bearer exactly
-// like a key); the refresh token, expiry, and scope are stored alongside it.
-export function connectionConfigFromToken(token: TokenResponse, now: Date = new Date()): AnyApiConfig {
-  const patch: AnyApiConfig = {
-    apiKey: token.access_token,
-    refreshToken: token.refresh_token,
-    scope: token.scope,
-  };
-  if (typeof token.expires_in === 'number' && Number.isFinite(token.expires_in)) {
-    patch.accessTokenExpiresAt = new Date(now.getTime() + token.expires_in * 1000).toISOString();
-  }
-  return patch;
-}
-
-// resolveClientId picks the OAuth client id in priority order: the per-trial
-// client from signup/init (preserves the trial-upgrade receipt), else a CLI
-// client previously registered via Dynamic Client Registration, else a fresh DCR
-// whose client id is persisted so the rate-limited endpoint is hit at most once.
-export async function resolveClientId(
-  config: AnyApiConfig,
-  client: AnyApiClient,
-  registrationEndpoint: string,
-  configPath: string,
-): Promise<string> {
-  const trialClientId = config.clientId?.trim();
-  if (trialClientId) {
-    return trialClientId;
-  }
-  const cliClientId = config.cliClientId?.trim();
-  if (cliClientId) {
-    return cliClientId;
-  }
-
-  let registered;
-  try {
-    registered = await client.registerClient(registrationEndpoint, {
-      clientName: CLI_CLIENT_NAME,
-      redirectUris: LOOPBACK_REDIRECT_URIS,
-    });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new CliError(`Could not register an OAuth client for anyapi connect: ${detail}`);
-  }
-
-  const clientId = registered.client_id?.trim();
-  if (!clientId) {
-    throw new CliError('OAuth client registration did not return a client_id.');
-  }
-  await mergeConfig({ cliClientId: clientId }, configPath);
-  return clientId;
-}
-
-// resolveEndpoints prefers the RFC 8414 metadata document and falls back to the
-// hardcoded gateway endpoints when discovery fails or omits an endpoint.
-async function resolveEndpoints(client: AnyApiClient): Promise<Endpoints> {
-  try {
-    const meta = await client.oauthMetadata(OAUTH_METADATA_URL);
-    if (meta.authorization_endpoint && meta.token_endpoint) {
-      return {
-        authorizationEndpoint: meta.authorization_endpoint,
-        tokenEndpoint: meta.token_endpoint,
-        registrationEndpoint: meta.registration_endpoint ?? OAUTH_REGISTER_URL,
-      };
-    }
-  } catch {
-    // Discovery is best-effort; fall through to the hardcoded endpoints.
-  }
-  return {
-    authorizationEndpoint: OAUTH_AUTHORIZE_URL,
-    tokenEndpoint: OAUTH_TOKEN_URL,
-    registrationEndpoint: OAUTH_REGISTER_URL,
-  };
 }
 
 interface LoopbackParams {
@@ -229,22 +146,6 @@ function respondHtml(res: ServerResponse, status: number, message: string): void
   const html = `<!doctype html><meta charset="utf-8"><title>AnyAPI</title><body style="font-family:system-ui;padding:2rem"><p>${message}</p></body>`;
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
-}
-
-// openBrowser launches the default browser best-effort; failures are ignored so
-// the printed consent URL remains the reliable path.
-function openBrowser(url: string): void {
-  const launch: { command: string; args: string[] } =
-    process.platform === 'darwin'
-      ? { command: 'open', args: [url] }
-      : process.platform === 'win32'
-        ? { command: 'cmd', args: ['/c', 'start', '', url] }
-        : { command: 'xdg-open', args: [url] };
-  try {
-    execFile(launch.command, launch.args, () => undefined);
-  } catch {
-    // Best-effort only.
-  }
 }
 
 function printConsentUrl(ctx: CommandContext, url: string): void {

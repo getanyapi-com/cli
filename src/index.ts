@@ -24,7 +24,7 @@ program
   .name('anyapi')
   .description('Official CLI for AnyAPI.')
   .option('--api-key <apiKey>', 'AnyAPI API key. Overrides ANYAPI_API_KEY and local config.')
-  .version('0.3.3');
+  .version('0.5.0');
 
 program
   .command('signup')
@@ -35,8 +35,9 @@ program
 
 program
   .command('login')
-  .description('Store an existing AnyAPI key locally. Pass the key with the global --api-key flag.')
-  .action(() => run(() => loginCommand(ctx, globalOptions())));
+  .description('Sign in with cross-device OAuth, or store an existing key with --api-key.')
+  .option('--api-key <apiKey>', 'Store an existing AnyAPI API key instead of starting OAuth.')
+  .action((options) => run(() => loginCommand(ctx, { apiKey: options.apiKey ?? globalOptions().apiKey })));
 
 program
   .command('search')

@@ -5,6 +5,7 @@ import type {
   CatalogApi,
   CatalogResponse,
   ClientRegistrationResponse,
+  DeviceAuthorizationResponse,
   FetchLike,
   OAuthMetadata,
   RunResult,
@@ -80,15 +81,34 @@ export class AnyApiClient {
     );
   }
 
+  async authorizeDevice(
+    deviceAuthorizationEndpoint: string,
+    params: { client_id: string; scope?: string; resource?: string },
+  ): Promise<DeviceAuthorizationResponse> {
+    return this.requestJson<DeviceAuthorizationResponse>(
+      deviceAuthorizationEndpoint,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(compactObject(params)).toString(),
+      },
+    );
+  }
+
   // exchangeToken posts to the OAuth token endpoint as a public client (no secret):
-  // application/x-www-form-urlencoded, used for the authorization_code grant.
-  async exchangeToken(tokenUrl: string, params: Record<string, string>): Promise<TokenResponse> {
+  // application/x-www-form-urlencoded, used for authorization_code and device_code grants.
+  async exchangeToken(
+    tokenUrl: string,
+    params: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<TokenResponse> {
     return this.requestJson<TokenResponse>(
       tokenUrl,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams(params).toString(),
+        signal,
       },
     );
   }

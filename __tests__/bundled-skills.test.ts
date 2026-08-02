@@ -25,6 +25,10 @@ describe('bundled agent skills', () => {
     expect(onboarding).toContain('npx -y anyapi-cli@latest init');
     expect(onboarding).toContain('anyapi signup --label agent');
     expect(onboarding).toContain('anyapi connect');
+    expect(onboarding).toContain('anyapi login');
+    expect(onboarding).toContain('OAuth device flow');
+    expect(onboarding).toContain('does not bind a localhost callback');
+    expect(onboarding).toContain('anyapi login --api-key aa_live_...');
 
     const run = readSkill('anyapi-run');
     expect(run).toContain('anyapi run reddit.search --input');

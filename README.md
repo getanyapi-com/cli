@@ -31,7 +31,8 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 
 - `anyapi signup [--label <label>] [--show-key]` - mint a free trial key and save it locally. The secret is not printed unless you pass `--show-key`.
 - `anyapi connect` - upgrade past the free trial via a one-URL OAuth 2.1 approval (Authorization Code + PKCE over a loopback callback). Prints a single consent URL for a human to open; on approval the CLI stores the access token and keeps working.
-- `anyapi login --api-key aa_live_...` - store an existing dashboard key locally.
+- `anyapi login` - sign in to an AnyAPI account immediately with the OAuth 2.0 device flow. The CLI prints a verification URL and user code, opens the complete URL when possible, and waits without binding a localhost callback.
+- `anyapi login --api-key aa_live_...` - manual-key compatibility path: store an existing dashboard key locally without starting OAuth.
 - `anyapi search <query>` - search the public catalog and print SKU, name, and USD price terms.
 - `anyapi list [--category <cat>]` - list catalog APIs.
 - `anyapi describe <sku>` - print the authenticated API definition, including opaque schemas and gateway-published USD pricing, lane order, and failover metadata.
@@ -42,6 +43,10 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi setup skills` - install only the bundled skills.
 
 Auth resolution order is `--api-key`, then `ANYAPI_API_KEY`, then `~/.anyapi/config.json`, then trial self-signup. When the trial budget is spent, runs return HTTP 402 `trial_cap_reached`; run `anyapi connect` to continue.
+
+Use `login` for immediate account-backed OAuth on any device. Use `connect` to
+upgrade and continue an existing free trial while preserving its trial receipt.
+OAuth access tokens refresh automatically from the saved session before expiry.
 
 ## Gateway and CLI responsibilities
 

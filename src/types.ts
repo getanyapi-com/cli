@@ -8,6 +8,7 @@ export interface AnyApiConfig {
   cliClientId?: string;
   refreshToken?: string;
   accessTokenExpiresAt?: string;
+  oauthClientId?: string;
   scope?: string;
 }
 
@@ -29,12 +30,22 @@ export interface SignupResponse {
 }
 
 export interface OAuthMetadata {
-  authorization_endpoint: string;
-  token_endpoint: string;
+  authorization_endpoint?: string;
+  device_authorization_endpoint?: string;
+  token_endpoint?: string;
   registration_endpoint?: string;
   code_challenge_methods_supported?: string[];
   token_endpoint_auth_methods_supported?: string[];
   scopes_supported?: string[];
+}
+
+export interface DeviceAuthorizationResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval?: number;
 }
 
 // ClientRegistrationRequest is the OAuth 2.1 Dynamic Client Registration body.
