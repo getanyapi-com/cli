@@ -63,19 +63,22 @@ metadata and are never recursively removed or rewritten by the CLI.
 
 ## Run idempotency
 
-Use an explicit idempotency key when a run may need to be repeated without another charge:
+The CLI generates a fresh random idempotency key for every logical invocation. Use an explicit
+key when a run may need to be resumed manually without another charge:
 
 ```sh
 anyapi run reddit.search --input '{"query":"anyapi"}' --idempotency-key k1
 ```
 
-Repeating the same request with the same key returns the original result without another charge once the gateway supports idempotency. Keys must be 1 to 255 visible ASCII characters. The CLI does not generate a key unless you explicitly opt in with `auto`:
+Repeating the same request with the same key returns the original result without another charge.
+Keys must be 1 to 255 visible ASCII characters. You can explicitly request another random key with
+`auto`:
 
 ```sh
 anyapi run reddit.search --input '{"query":"anyapi"}' --idempotency-key auto
 ```
 
-`auto` derives a deterministic key from the SKU, canonical JSON input, and current UTC date. Equivalent JSON formatting and property order produce the same key and request body during that day. Use `auto` to protect against accidental same-day reruns, but omit it when repeated runs are intentional.
+`auto` creates a random key for that invocation. It does not deduplicate a separate CLI command.
 
 If a key is already running, the CLI asks you to retry shortly with the same key. If a key was used with a different SKU or input, the CLI asks you to use a new key or retry the original request.
 

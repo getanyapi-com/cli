@@ -140,4 +140,16 @@ export interface RunResult {
   [key: string]: unknown;
 }
 
+export type RequestStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'expired';
+export interface RequestSnapshot {
+  requestId: string;
+  sku: string;
+  status: RequestStatus;
+  createdAt: string;
+  retryAfterSeconds?: number;
+  result?: RunResult;
+  error?: { code: string };
+  resultExpired?: boolean;
+}
+
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
