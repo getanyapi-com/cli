@@ -36,9 +36,14 @@ anyapi run reddit.search --input '{"query":"anyapi"}' --idempotency-key task-123
 ```
 
 Repeating the same request with the same key returns its original result without
-another charge. Use `--idempotency-key auto` to derive an opt-in daily key from
-the SKU and canonical JSON input. Omit the flag when repeated runs are
-intentional.
+another charge. The CLI generates a random key for every logical invocation. Pass
+an explicit `--idempotency-key` only when you need to resume that invocation yourself.
+`--idempotency-key auto` explicitly requests the same random per-invocation behavior.
+
+Provider-job APIs poll to completion by default. Use `--no-wait` to return the
+durable request ID immediately, then run `anyapi requests get <id>` or
+`anyapi requests wait <id>`. Never repeat the paid `run`; resume by request ID.
+On Ctrl-C the CLI prints the exact resume command.
 
 ## Run once, reshape forever at zero cost
 

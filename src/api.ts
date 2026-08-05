@@ -1,6 +1,6 @@
 import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { readCatalogResponse, readDiscoveryApi, readSearchResponse } from './discovery.js';
-import { ApiError } from './errors.js';
+import { ApiError, CliError } from './errors.js';
 import type {
   CatalogApi,
   CatalogResponse,
@@ -9,6 +9,7 @@ import type {
   FetchLike,
   OAuthMetadata,
   RunResult,
+  RequestSnapshot,
   SearchResponse,
   SignupResponse,
   TokenResponse,
@@ -28,6 +29,8 @@ export interface SignupOptions {
 
 export interface RunOptions {
   idempotencyKey?: string;
+  noWait?: boolean;
+  onAccepted?: (snapshot: RequestSnapshot) => void;
 }
 
 export class AnyApiClient {
@@ -150,17 +153,43 @@ export class AnyApiClient {
   // run always fetches the FULL result. Response shaping (fields/max_items/summary/
   // jq) is done locally by the CLI over the saved file, so re-slicing a paid run
   // costs nothing; no shape params are sent upstream.
-  async run(sku: string, input: unknown, options: RunOptions = {}): Promise<RunResult> {
+  async run(sku: string, input: unknown, options: RunOptions = {}): Promise<RunResult | RequestSnapshot> {
     const url = new URL(`${this.restBaseUrl}/run/${encodeURIComponent(sku)}`);
-    return this.requestJson<RunResult>(url, {
+    const response = await this.requestJson<RunResult | RequestSnapshot>(url, {
       method: 'POST',
       headers: {
         ...this.authHeaders(),
         'Content-Type': 'application/json',
         ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+        ...(options.noWait ? { Prefer: 'respond-async' } : {}),
       },
       body: JSON.stringify(input),
     });
+    if (!isRequestSnapshot(response)) return response;
+    options.onAccepted?.(response);
+    if (options.noWait) return response;
+    return this.waitRequest(response.requestId, response);
+  }
+
+  async getRequest(requestId: string): Promise<RequestSnapshot> {
+    return this.requestJson<RequestSnapshot>(`${this.restBaseUrl}/requests/${encodeURIComponent(requestId)}`, {
+      headers: this.authHeaders(),
+    });
+  }
+
+  async waitRequest(requestId: string, initial?: RequestSnapshot): Promise<RunResult> {
+    let snapshot = initial ?? await this.getRequest(requestId);
+    const deadline = Date.now() + 300_000;
+    while (snapshot.status === 'queued' || snapshot.status === 'running') {
+      if (Date.now() >= deadline) {
+        throw new CliError(`Request ${requestId} is still running. Resume with: anyapi requests wait ${requestId}`);
+      }
+      await delay(Math.max(1, snapshot.retryAfterSeconds ?? 2) * 1000);
+      snapshot = await this.getRequest(requestId);
+    }
+    if (snapshot.status === 'succeeded' && snapshot.result) return snapshot.result;
+    if (snapshot.resultExpired) throw new CliError(`Request ${requestId} succeeded, but its result expired.`);
+    throw new CliError(`Request ${requestId} ended with ${snapshot.error?.code ?? snapshot.status}.`);
   }
 
   async balance(): Promise<unknown> {
@@ -185,6 +214,11 @@ export class AnyApiClient {
     return body as T;
   }
 }
+
+const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+const isRequestSnapshot = (value: unknown): value is RequestSnapshot =>
+  typeof value === 'object' && value !== null && typeof (value as RequestSnapshot).requestId === 'string' &&
+  typeof (value as RequestSnapshot).status === 'string';
 
 function compactObject(input: Record<string, string | undefined>): Record<string, string> {
   return Object.fromEntries(

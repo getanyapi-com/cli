@@ -24,7 +24,7 @@ import { resolveLastFile } from './view.js';
 import { configureMcp, detectAgents, installSkillsForAgents, printAgentDetection } from './init.js';
 import { promptYesNo, writeLine, type CommandContext } from './io.js';
 import { deviceLoginCommand, type DeviceLoginDependencies } from './login.js';
-import type { AnyApiConfig, CatalogApi, RunResult, SignupResponse } from './types.js';
+import type { AnyApiConfig, CatalogApi, RequestSnapshot, RunResult, SignupResponse } from './types.js';
 
 interface ShapeCliOptions {
   fields?: string;
@@ -106,6 +106,7 @@ export async function runCommand(
     idempotencyKey?: string;
     output?: string;
     json?: boolean;
+    noWait?: boolean;
   },
 ): Promise<void> {
   const auth = await requireApiKey(ctx, global);
@@ -114,11 +115,21 @@ export async function runCommand(
   const prepared = prepareRunIdempotency(sku, input, options.idempotencyKey);
   const shape = parseShapeRequest(options);
 
-  let result: RunResult;
+  let result: RunResult | RequestSnapshot;
+  let acceptedRequestId: string | undefined;
+  const onInterrupt = () => {
+    if (acceptedRequestId) writeLine(ctx.stderr, `Resume with: anyapi requests wait ${acceptedRequestId}`);
+    process.exit(130);
+  };
   try {
     result = stripServerHint(await client.run(sku, prepared.input, {
       idempotencyKey: prepared.idempotencyKey,
-    }));
+      noWait: options.noWait,
+      onAccepted: (snapshot) => {
+        acceptedRequestId = snapshot.requestId;
+        process.once('SIGINT', onInterrupt);
+      },
+    }) as RunResult);
   } catch (error) {
     const idempotencyMessage = formatIdempotencyError(error);
     if (idempotencyMessage) {
@@ -129,6 +140,15 @@ export async function runCommand(
       throw new CliError('trial_cap_reached');
     }
     throw error;
+  } finally {
+    process.removeListener('SIGINT', onInterrupt);
+  }
+
+  if (isRequestSnapshot(result)) {
+    const rendered = JSON.stringify(result, null, options.json ? 0 : 2);
+    writeLine(ctx.stdout, rendered);
+    if (!options.json) writeLine(ctx.stdout, `Resume with: anyapi requests wait ${result.requestId}`);
+    return;
   }
 
   const shaped = hasShapeFlags(shape);
@@ -158,6 +178,21 @@ export async function runCommand(
     writeLine(ctx.stdout, hint);
   }
 }
+
+export async function getRequestCommand(ctx: CommandContext, global: GlobalOptions, requestId: string): Promise<void> {
+  const auth = await requireApiKey(ctx, global);
+  const client = new AnyApiClient({ apiKey: auth.apiKey, fetchImpl: ctx.fetchImpl });
+  writeLine(ctx.stdout, JSON.stringify(await client.getRequest(requestId), null, 2));
+}
+
+export async function waitRequestCommand(ctx: CommandContext, global: GlobalOptions, requestId: string): Promise<void> {
+  const auth = await requireApiKey(ctx, global);
+  const client = new AnyApiClient({ apiKey: auth.apiKey, fetchImpl: ctx.fetchImpl });
+  writeLine(ctx.stdout, JSON.stringify(await client.waitRequest(requestId), null, 2));
+}
+
+const isRequestSnapshot = (value: RunResult | RequestSnapshot): value is RequestSnapshot =>
+  typeof value.requestId === 'string' && typeof value.status === 'string';
 
 export async function viewCommand(
   ctx: CommandContext,
