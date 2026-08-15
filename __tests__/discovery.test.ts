@@ -68,6 +68,28 @@ describe('customer-safe discovery reader', () => {
     expect(formatCatalogPrice(api)).toBe('from USD 96.60/1k req');
   });
 
+  // A rate for a thousand requests is always a whole number of cents, because
+  // one credit is $0.00001 and lane prices are whole credits. The shared
+  // sub-dollar formatter pads to four decimals for real per-request charges,
+  // which would print 39 of the live catalog's rates as `USD 0.9000/1k req`.
+  it('prints a sub-dollar rate in cents rather than padded millionths', async () => {
+    const client = clientFor({
+      apis: [{
+        ...catalogResponse.apis[0],
+        pricing: {
+          from: { model: 'flat', unit: 'request', maxUsd: 0.0009, maxPer1kUsd: 0.9 },
+          failoverMaxUsd: 0.0009,
+          failoverMaxPer1kUsd: 0.9,
+        },
+        lanes: undefined,
+      }],
+    });
+
+    const api = (await client.catalog()).apis[0]!;
+
+    expect(formatCatalogPrice(api)).toBe('from USD 0.90/1k req');
+  });
+
   it('rejects offers published without the per-1k rate', async () => {
     const client = clientFor({
       apis: [{
