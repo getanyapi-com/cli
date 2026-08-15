@@ -96,24 +96,33 @@ function readPricing(value: unknown): DiscoveryPricing | undefined {
   const record = asRecord(value);
   const from = readOffer(record?.from);
   const failoverMaxUsd = usdNumber(record?.failoverMaxUsd);
-  if (!from || failoverMaxUsd === undefined) {
+  const failoverMaxPer1kUsd = usdNumber(record?.failoverMaxPer1kUsd);
+  if (!from || failoverMaxUsd === undefined || failoverMaxPer1kUsd === undefined) {
     return undefined;
   }
-  return { from, failoverMaxUsd };
+  return { from, failoverMaxUsd, failoverMaxPer1kUsd };
 }
 
+// Every static price arrives in both denominations: maxUsd for one request and
+// maxPer1kUsd for 1,000 of them. Both are read from the wire and neither is
+// derived here, because scaling dollars in binary floating point turns the
+// published 96.6 into 96.60000000000001 on 20 of the live catalog's prices.
 function readOffer(value: unknown): PricingOffer | undefined {
   const record = asRecord(value);
   const model = stringValue(record?.model);
   const unit = stringValue(record?.unit);
   const maxUsd = usdNumber(record?.maxUsd);
-  if (model === 'flat' && unit === 'request' && maxUsd !== undefined) {
-    return { model, unit, maxUsd };
+  const maxPer1kUsd = usdNumber(record?.maxPer1kUsd);
+  if (maxUsd === undefined || maxPer1kUsd === undefined) {
+    return undefined;
+  }
+  if (model === 'flat' && unit === 'request') {
+    return { model, unit, maxUsd, maxPer1kUsd };
   }
   const baseUsd = usdNumber(record?.baseUsd);
   const perUnitUsd = usdNumber(record?.perUnitUsd);
-  if (model === 'linear' && unit && baseUsd !== undefined && perUnitUsd !== undefined && maxUsd !== undefined) {
-    return { model, unit, baseUsd, perUnitUsd, maxUsd };
+  if (model === 'linear' && unit && baseUsd !== undefined && perUnitUsd !== undefined) {
+    return { model, unit, baseUsd, perUnitUsd, maxUsd, maxPer1kUsd };
   }
   return undefined;
 }

@@ -12,11 +12,16 @@ const catalogResponse = {
     description: 'Search Reddit',
     provider: 'AnyAPI',
     pricing: {
-      from: { model: 'linear', unit: 'result', baseUsd: 0.00005, perUnitUsd: 0.0001, maxUsd: 0.004 },
+      from: {
+        model: 'linear', unit: 'result', baseUsd: 0.00005, perUnitUsd: 0.0001, maxUsd: 0.004, maxPer1kUsd: 4,
+      },
       failoverMaxUsd: 0.005,
+      failoverMaxPer1kUsd: 5,
     },
     lanes: [{
-      pricing: { model: 'linear', unit: 'result', baseUsd: 0.00005, perUnitUsd: 0.0001, maxUsd: 0.004 },
+      pricing: {
+        model: 'linear', unit: 'result', baseUsd: 0.00005, perUnitUsd: 0.0001, maxUsd: 0.004, maxPer1kUsd: 4,
+      },
       health: { window: '30d', uptimePct: 99.5, latencyP50Ms: 240, requests: 80 },
     }],
     tryEligible: true,
@@ -35,9 +40,69 @@ describe('customer-safe discovery reader', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ category: 'social' });
     expect(response).toEqual(catalogResponse);
     expect(formatCatalogPrice(response.apis[0]!)).toBe(
-      'from USD 0.00005 + USD 0.0001/result (max USD 0.0040/request)',
+      'up to USD 4.00/1k req (USD 0.00005 + USD 0.0001/result)',
     );
     expectCustomerSafe(response);
+  });
+
+  it('quotes the published per-1k rate instead of scaling the per-request price', async () => {
+    // booking.search in the live catalog: 0.0966 * 1000 is 96.60000000000001,
+    // so the displayed rate is only exact when the published field is read.
+    const client = clientFor({
+      apis: [{
+        ...catalogResponse.apis[0],
+        pricing: {
+          from: { model: 'flat', unit: 'request', maxUsd: 0.0966, maxPer1kUsd: 96.6 },
+          failoverMaxUsd: 0.0966,
+          failoverMaxPer1kUsd: 96.6,
+        },
+        lanes: undefined,
+      }],
+    });
+
+    const api = (await client.catalog()).apis[0]!;
+
+    expect(api.pricing.from.maxPer1kUsd).toBe(96.6);
+    expect(api.pricing.from.maxPer1kUsd).not.toBe(0.0966 * 1000);
+    expect(api.pricing.failoverMaxPer1kUsd).toBe(96.6);
+    expect(formatCatalogPrice(api)).toBe('from USD 96.60/1k req');
+  });
+
+  // A rate for a thousand requests is always a whole number of cents, because
+  // one credit is $0.00001 and lane prices are whole credits. The shared
+  // sub-dollar formatter pads to four decimals for real per-request charges,
+  // which would print 39 of the live catalog's rates as `USD 0.9000/1k req`.
+  it('prints a sub-dollar rate in cents rather than padded millionths', async () => {
+    const client = clientFor({
+      apis: [{
+        ...catalogResponse.apis[0],
+        pricing: {
+          from: { model: 'flat', unit: 'request', maxUsd: 0.0009, maxPer1kUsd: 0.9 },
+          failoverMaxUsd: 0.0009,
+          failoverMaxPer1kUsd: 0.9,
+        },
+        lanes: undefined,
+      }],
+    });
+
+    const api = (await client.catalog()).apis[0]!;
+
+    expect(formatCatalogPrice(api)).toBe('from USD 0.90/1k req');
+  });
+
+  it('rejects offers published without the per-1k rate', async () => {
+    const client = clientFor({
+      apis: [{
+        ...catalogResponse.apis[0],
+        pricing: {
+          from: { model: 'flat', unit: 'request', maxUsd: 0.0966 },
+          failoverMaxUsd: 0.0966,
+          failoverMaxPer1kUsd: 96.6,
+        },
+      }],
+    });
+
+    await expect(client.catalog()).rejects.toThrow('Invalid AnyAPI API discovery response.');
   });
 
   it('accepts discovery from older gateways without optional routing booleans', async () => {
@@ -59,8 +124,9 @@ describe('customer-safe discovery reader', () => {
         category: 'shopping',
         provider: 'AnyAPI',
         pricing: {
-          from: { model: 'flat', unit: 'request', maxUsd: 0.005 },
+          from: { model: 'flat', unit: 'request', maxUsd: 0.005, maxPer1kUsd: 5 },
           failoverMaxUsd: 0.006,
+          failoverMaxPer1kUsd: 6,
         },
         relevance: 0.92,
         highlightFields: [{ path: 'items[].price', type: 'number' }],
@@ -88,7 +154,7 @@ describe('customer-safe discovery reader', () => {
       results: [{
         slug: 'amazon.product',
         provider: 'AnyAPI',
-        pricing: { from: { model: 'flat', unit: 'request', maxUsd: 0.005 } },
+        pricing: { from: { model: 'flat', unit: 'request', maxUsd: 0.005, maxPer1kUsd: 5 } },
         relevance: 0.92,
       }],
     });
@@ -136,9 +202,11 @@ describe('customer-safe discovery reader', () => {
             baseUsd: 0.2,
             perUnitUsd: 0.3,
             maxUsd: 0.4,
+            maxPer1kUsd: 400,
             futureOfferField: 'ignored',
           },
           failoverMaxUsd: 0.1,
+          failoverMaxPer1kUsd: 100,
           futurePricingField: 'ignored',
         },
         lanes: [{
@@ -147,6 +215,7 @@ describe('customer-safe discovery reader', () => {
             model: 'flat',
             unit: 'request',
             maxUsd: 0.9,
+            maxPer1kUsd: 900,
             futureOfferField: 'ignored',
           },
           health: {
@@ -175,11 +244,13 @@ describe('customer-safe discovery reader', () => {
             baseUsd: 0.2,
             perUnitUsd: 0.3,
             maxUsd: 0.4,
+            maxPer1kUsd: 400,
           },
           failoverMaxUsd: 0.1,
+          failoverMaxPer1kUsd: 100,
         },
         lanes: [{
-          pricing: { model: 'flat', unit: 'request', maxUsd: 0.9 },
+          pricing: { model: 'flat', unit: 'request', maxUsd: 0.9, maxPer1kUsd: 900 },
           health: {
             window: '7d',
             uptimePct: 42,
@@ -201,8 +272,9 @@ describe('customer-safe discovery reader', () => {
         category: 'shopping',
         provider: 'AnyAPI',
         pricing: {
-          from: { model: 'flat', unit: 'request', maxUsd: 0.005 },
+          from: { model: 'flat', unit: 'request', maxUsd: 0.005, maxPer1kUsd: 5 },
           failoverMaxUsd: 0.006,
+          failoverMaxPer1kUsd: 6,
         },
         relevance: 0.92,
         highlightFields: [{
@@ -268,8 +340,9 @@ describe('customer-safe discovery reader', () => {
       apis: [{
         ...catalogResponse.apis[0],
         pricing: {
-          from: { model: 'flat', unit: 'request', maxUsd },
+          from: { model: 'flat', unit: 'request', maxUsd, maxPer1kUsd: 10 },
           failoverMaxUsd: 0.01,
+          failoverMaxPer1kUsd: 10,
         },
       },
       ],

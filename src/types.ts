@@ -74,7 +74,10 @@ export interface TokenResponse {
 export interface FlatPricingOffer {
   model: 'flat';
   unit: 'request';
+  /** USD billed for one request */
   maxUsd: number;
+  /** the same maximum per 1,000 requests, published by the gateway */
+  maxPer1kUsd: number;
 }
 
 export interface LinearPricingOffer {
@@ -82,7 +85,10 @@ export interface LinearPricingOffer {
   unit: string;
   baseUsd: number;
   perUnitUsd: number;
+  /** USD ceiling for one request */
   maxUsd: number;
+  /** the same ceiling per 1,000 requests, published by the gateway */
+  maxPer1kUsd: number;
 }
 
 export type PricingOffer = FlatPricingOffer | LinearPricingOffer;
@@ -90,6 +96,7 @@ export type PricingOffer = FlatPricingOffer | LinearPricingOffer;
 export interface DiscoveryPricing {
   from: PricingOffer;
   failoverMaxUsd: number;
+  failoverMaxPer1kUsd: number;
 }
 
 export interface DiscoveryLane {
