@@ -6,6 +6,9 @@ import type {
   CatalogResponse,
   ClientRegistrationResponse,
   DeviceAuthorizationResponse,
+  FeedbackKind,
+  FeedbackReportInput,
+  FeedbackReportResponse,
   FetchLike,
   OAuthMetadata,
   RunResult,
@@ -195,6 +198,27 @@ export class AnyApiClient {
   async balance(): Promise<unknown> {
     return this.requestJson<unknown>(`${this.restBaseUrl}/balance`, {
       headers: this.authHeaders(),
+    });
+  }
+
+  // submitReport files a bug report or a piece of feedback. The kind selects the
+  // route rather than riding in the body, so a caller cannot file one as the
+  // other. Free: nothing is charged.
+  async submitReport(
+    kind: FeedbackKind,
+    input: FeedbackReportInput,
+  ): Promise<FeedbackReportResponse> {
+    const path = kind === 'bug' ? 'bug-reports' : 'feedback';
+    return this.requestJson<FeedbackReportResponse>(`${this.restBaseUrl}/${path}`, {
+      method: 'POST',
+      headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(compactObject({
+        summary: input.summary,
+        details: input.details,
+        sku: input.sku,
+        requestId: input.requestId,
+        contact: input.contact,
+      })),
     });
   }
 

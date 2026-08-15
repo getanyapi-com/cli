@@ -16,6 +16,7 @@ import {
   type GlobalOptions,
 } from "./commands.js";
 import { connectCommand } from "./connect.js";
+import { feedbackCommand, reportBugCommand } from "./feedback.js";
 import { CliError } from "./errors.js";
 import { defaultContext } from "./io.js";
 import { normalizeRunCLIOptions } from "./run.js";
@@ -30,7 +31,7 @@ program
     "--api-key <apiKey>",
     "AnyAPI API key. Overrides ANYAPI_API_KEY and local config.",
   )
-  .version("0.5.0");
+  .version("0.8.0");
 
 program
   .command("signup")
@@ -155,6 +156,37 @@ program
   .command("balance")
   .description("Print the remaining USD balance.")
   .action(() => run(() => balanceCommand(ctx, globalOptions())));
+
+program
+  .command("report-bug")
+  .description(
+    "Tell AnyAPI something is broken: a wrong or empty result, a misleading error, a price that looks off. Free.",
+  )
+  .argument("<summary>", "One line saying what went wrong.")
+  .option("--details <details>", "What you expected, what you got, what you tried.")
+  .option("--sku <sku>", "The SKU this is about, e.g. instagram.reels_search.")
+  .option(
+    "--request-id <requestId>",
+    "The requestId or resultId from the run that went wrong. The most useful thing you can attach.",
+  )
+  .option("--contact <email>", "Email to reply to. Supply one if you are on a trial key.")
+  .action((summary, options) =>
+    run(() => reportBugCommand(ctx, globalOptions(), summary, options)),
+  );
+
+program
+  .command("feedback")
+  .description(
+    "Tell AnyAPI something that is not a defect: a missing API, a missing field, confusing docs. Free.",
+  )
+  .argument("<summary>", "One line of feedback.")
+  .option("--details <details>", "What you were trying to accomplish.")
+  .option("--sku <sku>", "The SKU this is about, if any.")
+  .option("--request-id <requestId>", "A related requestId or resultId, if any.")
+  .option("--contact <email>", "Email to reply to. Supply one if you are on a trial key.")
+  .action((summary, options) =>
+    run(() => feedbackCommand(ctx, globalOptions(), summary, options)),
+  );
 
 program
   .command("connect")

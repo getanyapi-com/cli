@@ -29,6 +29,27 @@ export interface SignupResponse {
   notice?: string;
 }
 
+// FeedbackKind picks the route a report is filed on. The CLI never sends it in
+// the body: the gateway stamps the kind from the endpoint it served.
+export type FeedbackKind = 'bug' | 'feedback';
+
+export interface FeedbackReportInput {
+  summary: string;
+  details?: string;
+  sku?: string;
+  requestId?: string;
+  contact?: string;
+}
+
+export interface FeedbackReportResponse {
+  id: string;
+  kind: FeedbackKind;
+  summary: string;
+  sku?: string;
+  requestId?: string;
+  createdAt: string;
+}
+
 export interface OAuthMetadata {
   authorization_endpoint?: string;
   device_authorization_endpoint?: string;
