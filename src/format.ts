@@ -7,15 +7,23 @@ export function formatUsd(value: unknown): string {
   return `USD ${formatUsdNumber(value)}`;
 }
 
+/** Catalog prices are quoted at this shared rate; a run is still billed per request. */
+const REQUEST_RATE_LABEL = '/1k req';
+
 export function formatCatalogPrice(api: CatalogApi): string {
   return formatPricingOffer(api.pricing.from);
 }
 
+// Catalog prices are quoted per 1,000 requests because most of the catalog costs
+// a fraction of a cent per call. The rate is the gateway's published
+// maxPer1kUsd, never maxUsd scaled here. A metered offer keeps its per-item rate
+// per item, which is what the customer's `limit` actually moves.
 export function formatPricingOffer(offer: PricingOffer): string {
+  const rate = `${formatUsd(offer.maxPer1kUsd)}${REQUEST_RATE_LABEL}`;
   if (offer.model === 'flat') {
-    return `from ${formatUsd(offer.maxUsd)}/request`;
+    return `from ${rate}`;
   }
-  return `from ${formatUsd(offer.baseUsd)} + ${formatUsd(offer.perUnitUsd)}/${offer.unit} (max ${formatUsd(offer.maxUsd)}/request)`;
+  return `up to ${rate} (${formatUsd(offer.baseUsd)} + ${formatUsd(offer.perUnitUsd)}/${offer.unit})`;
 }
 
 export function printTable(rows: string[][]): string {
