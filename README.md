@@ -39,6 +39,8 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi run <sku> [--input '<json>'] [-i file] [--idempotency-key <key>] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [-o path] [--json]` - run an API. Always saves the full result; shape flags trim only the stdout view.
 - `anyapi view [path] [--last [sku]] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [--json]` - re-shape a saved run file locally. Zero network, zero cost.
 - `anyapi balance` - print the remaining USD balance.
+- `anyapi report-bug <summary> [--details <text>] [--sku <sku>] [--request-id <id>] [--contact <email>]` - tell us something is broken: a wrong or empty result, a misleading error, a price that looks off. Free, never charged. `--request-id` from the failing run is the most useful thing you can attach, because it reaches the stored run and its upstream error body.
+- `anyapi feedback <summary> [--details <text>] [--sku <sku>] [--request-id <id>] [--contact <email>]` - tell us something that is not a defect: a missing API, a missing field, confusing docs. Free, never charged.
 - `anyapi init [--all] [--yes]` - mint a trial key if none exists, install bundled agent skills, and show or apply MCP setup snippets.
 - `anyapi setup skills` - install only the bundled skills.
 

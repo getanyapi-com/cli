@@ -255,7 +255,9 @@ export async function setupSkillsCommand(ctx: CommandContext, options: { all?: b
   installed.forEach((line) => writeLine(ctx.stdout, `- ${line}`));
 }
 
-async function requireApiKey(ctx: CommandContext, global: GlobalOptions): Promise<{ apiKey: string; config: AnyApiConfig }> {
+// Exported so sibling command modules resolve a key through exactly this path,
+// including its offer to mint a trial key rather than dead-ending.
+export async function requireApiKey(ctx: CommandContext, global: GlobalOptions): Promise<{ apiKey: string; config: AnyApiConfig }> {
   const auth = await resolveApiKey({
     apiKey: global.apiKey,
     env: ctx.env,
