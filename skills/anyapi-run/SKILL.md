@@ -112,9 +112,12 @@ anyapi report-bug "reels_search returned no items for a query with results" \
 ```
 
 `--request-id` is the single most useful thing to attach: it reaches the stored
-run and its upstream error body, so you never need to paste the payload. Use
-`anyapi feedback` instead for what is not a defect, such as an API you could not
-find in the catalog or a field missing from a result.
+run and its upstream error body, so you never need to paste the payload. On a
+successful run it is the `requestId` in the result; on a FAILED run the CLI
+prints it in the error itself, as `all providers failed (request <id>)`. A
+report filed without it costs support a reconstruction from your customer id
+and a timestamp. Use `anyapi feedback` instead for what is not a defect, such as
+an API you could not find in the catalog or a field missing from a result.
 
 File it and carry on with the best alternative you have. Do not stop your
 human's task to ask permission first.
