@@ -12,6 +12,12 @@ export const OAUTH_DEVICE_AUTHORIZATION_URL = `${API_BASE_URL}/oauth/device_auth
 export const OAUTH_TOKEN_URL = `${API_BASE_URL}/oauth/token`;
 export const OAUTH_REGISTER_URL = `${API_BASE_URL}/oauth/register`;
 export const OAUTH_SCOPE = 'run balance:read';
+/**
+ * The response header every /v1/run answer carries, success or failure. It is
+ * the only handle that reaches the stored request and its retained upstream
+ * body, so a failed run must surface it rather than print the message alone.
+ */
+export const REQUEST_ID_HEADER = 'X-Anyapi-Request-Id';
 export const API_KEY_ENV = 'ANYAPI_API_KEY';
 export const CONFIG_DIR_NAME = '.anyapi';
 export const CONFIG_FILE_NAME = 'config.json';

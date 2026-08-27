@@ -1,4 +1,4 @@
-import { CATALOG_URL, REST_BASE_URL, SIGNUP_URL } from './constants.js';
+import { CATALOG_URL, REQUEST_ID_HEADER, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { readCatalogResponse, readDiscoveryApi, readSearchResponse } from './discovery.js';
 import { ApiError, CliError } from './errors.js';
 import type {
@@ -233,7 +233,12 @@ export class AnyApiClient {
     const response = await this.fetchImpl(input, init);
     const body = await parseBody(response);
     if (!response.ok) {
-      throw new ApiError(errorMessage(body, response.status), response.status, body);
+      throw new ApiError(
+        errorMessage(body, response.status),
+        response.status,
+        body,
+        response.headers.get(REQUEST_ID_HEADER) ?? '',
+      );
     }
     return body as T;
   }

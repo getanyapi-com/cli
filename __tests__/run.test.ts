@@ -207,6 +207,52 @@ describe("run output paths", () => {
   });
 });
 
+describe("failed run traceability", () => {
+  // Every bug report filed through `anyapi report-bug` on 2026-08-26 said "no
+  // request id was produced": the gateway sends one on X-Anyapi-Request-Id for
+  // failures too, and this client dropped it, leaving support to reconstruct
+  // the run from a customer id and a timestamp.
+  it("surfaces the gateway request id on a failed run", async () => {
+    const fetchImpl: FetchLike = async () =>
+      new Response(
+        JSON.stringify({ error: "all providers failed", code: "all_providers_failed" }),
+        {
+          status: 502,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Anyapi-Request-Id": "0a508adc-c7d7-4734-a43e-fdbb3d3b7b0e",
+          },
+        },
+      );
+    const client = new AnyApiClient({
+      apiKey: "aa_live_test",
+      fetchImpl,
+      restBaseUrl: "https://example.test/v1",
+    });
+
+    await expect(client.run("facebook.search_companies", { query: "acme" }))
+      .rejects.toThrow(
+        "all providers failed (request 0a508adc-c7d7-4734-a43e-fdbb3d3b7b0e)",
+      );
+  });
+
+  it("leaves the message alone when the response carries no request id", async () => {
+    const fetchImpl: FetchLike = async () =>
+      new Response(JSON.stringify({ error: "Missing or invalid API key." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    const client = new AnyApiClient({
+      apiKey: "aa_live_test",
+      fetchImpl,
+      restBaseUrl: "https://example.test/v1",
+    });
+
+    await expect(client.run("reddit.search", { query: "anyapi" }))
+      .rejects.toThrow(/^Missing or invalid API key\.$/);
+  });
+});
+
 describe("402 handling", () => {
   it("detects trial cap errors and relays the server upgrade guidance", async () => {
     const fetchImpl: FetchLike = async () =>
