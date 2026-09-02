@@ -25,7 +25,7 @@ anyapi describe reddit.search
 anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 ```
 
-`anyapi init` mints a **free trial key** when none is available (about $0.15 of requests, no account created, self-expires in 7 days), saves it to `~/.anyapi/config.json`, and installs the bundled agent skills. When the trial budget runs out, `anyapi connect` upgrades past it with one human approval.
+`anyapi init` mints a **free trial key** when none is available (about $0.05 of requests, no account created, self-expires in 7 days), saves it to `~/.anyapi/config.json`, and installs the bundled agent skills. When the trial budget runs out, `anyapi connect` upgrades past it with one human approval.
 
 ## Commands
 
