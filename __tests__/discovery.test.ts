@@ -162,6 +162,30 @@ describe('customer-safe discovery reader', () => {
     expectCustomerSafe(response);
   });
 
+  it('scopes a search without a query and omits q rather than sending it empty', async () => {
+    let requested = '';
+    const client = clientFor({ results: [], total: 0, ranking: 'semantic' }, (url) => { requested = url; });
+
+    await client.search({ platform: 'reddit' });
+
+    let url = new URL(requested);
+    expect(url.pathname).toBe('/catalog/search');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ platform: 'reddit' });
+
+    await client.search({ category: 'social', limit: 5 });
+
+    url = new URL(requested);
+    expect(Object.fromEntries(url.searchParams)).toEqual({ category: 'social', limit: '5' });
+  });
+
+  it('rejects a search naming no query, category, or platform without calling the gateway', async () => {
+    let called = false;
+    const client = clientFor({ results: [] }, () => { called = true; });
+
+    await expect(client.search({})).rejects.toThrow('Search needs a query, --category, or --platform.');
+    expect(called).toBe(false);
+  });
+
   it('reads authenticated detail responses and preserves schemas as opaque JSON', async () => {
     let authorization = '';
     const body = {

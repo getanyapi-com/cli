@@ -15,6 +15,7 @@ Use this before running an unknown task. Search or list first, then describe the
 
 ```sh
 anyapi search "reddit posts"
+anyapi search --platform reddit
 anyapi list --category social
 anyapi describe reddit.search
 ```
@@ -32,6 +33,9 @@ Search and list are public. Describe is authenticated because it returns the ful
 ## Key options
 
 - `anyapi search <query>` uses the dedicated ranked discovery search.
+- `anyapi search --category <cat> --platform <platform>` scopes the search. Any
+  non-empty combination of the query, `--category` and `--platform` works, so a
+  scope with no query lists every API on that platform or in that category.
 - `anyapi list --category <cat>` narrows by category.
 - `anyapi describe <sku>` prints input schema, output schema, and USD pricing.
 - Discovery pricing is always nested under `pricing`; ranked search reports

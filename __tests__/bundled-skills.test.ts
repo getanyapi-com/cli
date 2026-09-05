@@ -12,6 +12,7 @@ describe('bundled agent skills', () => {
   it('document the current discovery, execution, and onboarding commands', () => {
     const discover = readSkill('anyapi-discover');
     expect(discover).toContain('anyapi search <query>');
+    expect(discover).toContain('anyapi search --category <cat> --platform <platform>');
     expect(discover).toContain('anyapi list --category <cat>');
     expect(discover).toContain('anyapi describe <sku>');
     expect(discover).toContain('dedicated ranked discovery search');

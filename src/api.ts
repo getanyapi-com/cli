@@ -128,11 +128,20 @@ export class AnyApiClient {
     return readCatalogResponse(body);
   }
 
-  async search(options: { query: string; category?: string; platform?: string; limit?: number }): Promise<SearchResponse> {
+  // search accepts any non-empty combination of query, category and platform,
+  // matching what the gateway's ranked search allows. An absent query is omitted
+  // rather than sent empty, and a request naming none of the three is rejected
+  // here instead of earning a gateway 400.
+  async search(options: { query?: string; category?: string; platform?: string; limit?: number }): Promise<SearchResponse> {
+    if (!options.query && !options.category && !options.platform) {
+      throw new CliError('Search needs a query, --category, or --platform.');
+    }
     const url = new URL(this.catalogUrl);
     url.pathname = `${url.pathname.replace(/\/$/, '')}/search`;
     url.search = '';
-    url.searchParams.set('q', options.query);
+    if (options.query) {
+      url.searchParams.set('q', options.query);
+    }
     if (options.category) {
       url.searchParams.set('category', options.category);
     }

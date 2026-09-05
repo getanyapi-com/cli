@@ -34,6 +34,7 @@ anyapi run reddit.search --input '{"query":"anyapi","limit":5}'
 - `anyapi login` - sign in to an AnyAPI account immediately with the OAuth 2.0 device flow. The CLI prints a verification URL and user code, opens the complete URL when possible, and waits without binding a localhost callback.
 - `anyapi login --api-key aa_live_...` - manual-key compatibility path: store an existing dashboard key locally without starting OAuth.
 - `anyapi search <query>` - search the public catalog and print SKU, name, and USD price terms.
+  `--category <cat>` and `--platform <platform>` scope the search, and either one works without a query.
 - `anyapi list [--category <cat>]` - list catalog APIs.
 - `anyapi describe <sku>` - print the authenticated API definition, including opaque schemas and gateway-published USD pricing, lane order, and failover metadata.
 - `anyapi run <sku> [--input '<json>'] [-i file] [--idempotency-key <key>] [--jq <expr>] [--fields a,b] [--max-items N] [--summary] [-o path] [--json]` - run an API. Always saves the full result; shape flags trim only the stdout view.

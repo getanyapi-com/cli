@@ -58,8 +58,10 @@ program
 program
   .command("search")
   .description("Search the public AnyAPI catalog.")
-  .argument("<query>", "Search query.")
-  .action((query) => run(() => searchCommand(ctx, query)));
+  .argument("[query]", "Search query. Optional when --category or --platform is given.")
+  .option("--category <category>", "Filter by category.")
+  .option("--platform <platform>", "Filter by platform.")
+  .action((query, options) => run(() => searchCommand(ctx, query, options)));
 
 program
   .command("list")
