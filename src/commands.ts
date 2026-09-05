@@ -78,9 +78,13 @@ export async function loginCommand(
   writeLine(ctx.stdout, 'AnyAPI key saved to ~/.anyapi/config.json.');
 }
 
-export async function searchCommand(ctx: CommandContext, query: string): Promise<void> {
+export async function searchCommand(
+  ctx: CommandContext,
+  query: string | undefined,
+  options: { category?: string; platform?: string } = {},
+): Promise<void> {
   const client = new AnyApiClient({ fetchImpl: ctx.fetchImpl });
-  const results = await client.search({ query });
+  const results = await client.search({ query, category: options.category, platform: options.platform });
   writeCatalogTable(ctx, results.results);
 }
 
