@@ -175,6 +175,27 @@ describe('credential selection', () => {
       clientId: 'aa_client_trial',
     });
   });
+
+  it('saves a trial key from a signup response without the retired claim fields', async () => {
+    const homeDir = await tempDir();
+    const ctx = commandContext(homeDir, async () => json({
+      secret: 'aa_live_trial',
+      keyId: 'key_trial',
+      capUsd: 0.15,
+      expiresAt: '2026-08-09T12:00:00.000Z',
+      clientId: 'aa_client_trial',
+    }));
+
+    await signupCommand(ctx, {});
+
+    expect(await readConfig(getConfigPath(homeDir))).toEqual({
+      apiKey: 'aa_live_trial',
+      keyId: 'key_trial',
+      capUsd: 0.15,
+      expiresAt: '2026-08-09T12:00:00.000Z',
+      clientId: 'aa_client_trial',
+    });
+  });
 });
 
 describe('device token polling', () => {
