@@ -22,7 +22,7 @@ export interface SignupResponse {
   secret: string;
   keyId: string;
   capUsd: number;
-  verificationStatus: string;
+  verificationStatus?: string;
   expiresAt: string;
   clientId?: string;
   upgrade?: SignupUpgrade;
