@@ -20,6 +20,7 @@ import { feedbackCommand, reportBugCommand } from "./feedback.js";
 import { CliError } from "./errors.js";
 import { defaultContext } from "./io.js";
 import { normalizeRunCLIOptions } from "./run.js";
+import { VERSION } from "./version.js";
 
 const program = new Command();
 const ctx = defaultContext();
@@ -31,7 +32,7 @@ program
     "--api-key <apiKey>",
     "AnyAPI API key. Overrides ANYAPI_API_KEY and local config.",
   )
-  .version("0.8.0");
+  .version(VERSION);
 
 program
   .command("signup")
