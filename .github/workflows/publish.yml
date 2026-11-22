@@ -1,27 +1,44 @@
 name: publish
 
+# Publishes anyapi-cli through npm trusted publishing (OIDC, no token). The trusted
+# publisher on npmjs.com is getanyapi-com/cli, workflow publish.yml, no environment.
+#
+# Triggers:
+#   - push tag v*: a release tag.
+#   - workflow_dispatch (input: tag): republish an existing tag, e.g. after a failed run:
+#     gh workflow run publish.yml -R getanyapi-com/cli --ref main -f tag=v0.9.2
+
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The version tag to publish (e.g. v0.9.2). Must already exist."
+        required: true
+        type: string
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write # npm trusted publishing (OIDC) and provenance
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      # npm trusted publishing needs Node >= 22.14.0 and npm CLI >= 11.5.1.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
+      - name: upgrade npm CLI for trusted publishing
+        run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm test
       - run: npm run canary:live
       - run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
