@@ -168,6 +168,25 @@ export function formatIdempotencyError(error: unknown): string | undefined {
   }
 }
 
+// formatRateLimitedError explains the 429 rate_limited the gateway returns when
+// the account has started its limit of new requests to this API in the current
+// minute. Nothing was run or charged, so running it again after the wait is safe.
+export function formatRateLimitedError(error: unknown): string | undefined {
+  if (
+    !(error instanceof ApiError) ||
+    error.status !== 429 ||
+    !isRecord(error.body) ||
+    error.body.code !== "rate_limited"
+  ) {
+    return undefined;
+  }
+  const wait =
+    error.retryAfterSeconds === undefined
+      ? "until the next minute starts"
+      : `${error.retryAfterSeconds} second${error.retryAfterSeconds === 1 ? "" : "s"}`;
+  return `This account has reached its limit of new requests a minute to this API. Nothing was run or charged. Wait ${wait}, then run it again.`;
+}
+
 function trialCapServerMessage(error: unknown): string | undefined {
   if (
     error instanceof ApiError &&

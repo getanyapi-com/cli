@@ -247,6 +247,7 @@ export class AnyApiClient {
         response.status,
         body,
         response.headers.get(REQUEST_ID_HEADER) ?? '',
+        retryAfterSeconds(response.headers.get('retry-after')),
       );
     }
     return body as T;
@@ -274,6 +275,12 @@ async function parseBody(response: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+// The gateway sends Retry-After as whole seconds; anything else is ignored.
+function retryAfterSeconds(header: string | null): number | undefined {
+  if (header === null || !/^\d+$/.test(header.trim())) return undefined;
+  return Number(header.trim());
 }
 
 function errorMessage(body: unknown, status: number): string {

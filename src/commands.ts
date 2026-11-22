@@ -10,6 +10,7 @@ import { formatCatalogPrice, formatUsd, printTable } from './format.js';
 import {
   buildRunOutputPath,
   formatIdempotencyError,
+  formatRateLimitedError,
   formatTrialCapMessage,
   isTrialCapReached,
   localRereadHint,
@@ -138,6 +139,10 @@ export async function runCommand(
     const idempotencyMessage = formatIdempotencyError(error);
     if (idempotencyMessage) {
       throw new CliError(idempotencyMessage);
+    }
+    const rateLimitedMessage = formatRateLimitedError(error);
+    if (rateLimitedMessage) {
+      throw new CliError(rateLimitedMessage);
     }
     if (isTrialCapReached(error)) {
       writeLine(ctx.stderr, formatTrialCapMessage(error));
