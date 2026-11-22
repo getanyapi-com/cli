@@ -1,6 +1,6 @@
 import { CATALOG_URL, REQUEST_ID_HEADER, REST_BASE_URL, SIGNUP_URL } from './constants.js';
 import { readCatalogResponse, readDiscoveryApi, readSearchResponse } from './discovery.js';
-import { ApiError, CliError } from './errors.js';
+import { ApiError, CliError, isRateLimited } from './errors.js';
 import type {
   CatalogApi,
   CatalogResponse,
@@ -190,18 +190,31 @@ export class AnyApiClient {
   }
 
   async waitRequest(requestId: string, initial?: RequestSnapshot): Promise<RunResult> {
-    let snapshot = initial ?? await this.getRequest(requestId);
     const deadline = Date.now() + 300_000;
+    let snapshot = initial ?? await this.pollRequest(requestId, deadline);
     while (snapshot.status === 'queued' || snapshot.status === 'running') {
-      if (Date.now() >= deadline) {
-        throw new CliError(`Request ${requestId} is still running. Resume with: anyapi requests wait ${requestId}`);
-      }
+      if (Date.now() >= deadline) throw stillRunning(requestId);
       await delay(Math.max(1, snapshot.retryAfterSeconds ?? 2) * 1000);
-      snapshot = await this.getRequest(requestId);
+      snapshot = await this.pollRequest(requestId, deadline);
     }
     if (snapshot.status === 'succeeded' && snapshot.result) return snapshot.result;
     if (snapshot.resultExpired) throw new CliError(`Request ${requestId} succeeded, but its result expired.`);
     throw new CliError(`Request ${requestId} ended with ${snapshot.error?.code ?? snapshot.status}.`);
+  }
+
+  // pollRequest reads an accepted request. A 429 rate_limited here means it is
+  // still running and was read too soon, so wait Retry-After and read the same
+  // id again; never start a new run, which could be charged twice.
+  private async pollRequest(requestId: string, deadline: number): Promise<RequestSnapshot> {
+    for (;;) {
+      try {
+        return await this.getRequest(requestId);
+      } catch (error) {
+        if (!isRateLimited(error)) throw error;
+        if (Date.now() >= deadline) throw stillRunning(requestId);
+        await delay(Math.max(1, error.retryAfterSeconds ?? 2) * 1000);
+      }
+    }
   }
 
   async balance(): Promise<unknown> {
@@ -254,6 +267,8 @@ export class AnyApiClient {
   }
 }
 
+const stillRunning = (requestId: string) =>
+  new CliError(`Request ${requestId} is still running. Resume with: anyapi requests wait ${requestId}`);
 const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const isRequestSnapshot = (value: unknown): value is RequestSnapshot =>
   typeof value === 'object' && value !== null && typeof (value as RequestSnapshot).requestId === 'string' &&

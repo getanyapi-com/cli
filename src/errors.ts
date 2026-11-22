@@ -31,3 +31,16 @@ export class ApiError extends Error {
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+// isRateLimited is the gateway's 429 rate_limited. On starting a run it means
+// nothing ran; on reading an accepted request it means the request is still
+// running and is read again after Retry-After.
+export function isRateLimited(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    error.status === 429 &&
+    typeof error.body === 'object' &&
+    error.body !== null &&
+    (error.body as { code?: unknown }).code === 'rate_limited'
+  );
+}

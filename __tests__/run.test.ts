@@ -168,11 +168,13 @@ describe("run idempotency", () => {
 });
 
 describe("run rate limit", () => {
-  it("tells the caller how long to wait on 429 rate_limited", async () => {
+  it("passes through the gateway's 429 message and keeps the request id", async () => {
+    const message =
+      "this account's requests to this API could not be counted just now, so nothing was run or charged; retry in 37 seconds";
     const fetchImpl: FetchLike = async () =>
       Response.json(
-        { error: "limit reached", code: "rate_limited" },
-        { status: 429, headers: { "Retry-After": "37" } },
+        { error: message, code: "rate_limited" },
+        { status: 429, headers: { "Retry-After": "37", "X-Anyapi-Request-Id": "req_limited" } },
       );
 
     await expect(
@@ -180,9 +182,35 @@ describe("run rate limit", () => {
         input: '{"query":"anyapi"}',
         json: true,
       }),
-    ).rejects.toThrow(
-      "This account has reached its limit of new requests a minute to this API. Nothing was run or charged. Wait 37 seconds, then run it again.",
-    );
+    ).rejects.toThrow(`${message} (request req_limited)`);
+  });
+
+  it("waits out a 429 while reading an accepted request and reads the same id again", async () => {
+    const result = { output: { items: [] }, provider: "AnyAPI", costUsd: 0.01, items: 0 };
+    const calls: string[] = [];
+    const responses = [
+      Response.json(
+        { requestId: "req_running", sku: "reddit.search", status: "running", createdAt: "now", retryAfterSeconds: 1 },
+        { status: 202 },
+      ),
+      Response.json(
+        { error: "this request is still running; read it again after Retry-After seconds", code: "rate_limited" },
+        { status: 429, headers: { "Retry-After": "1" } },
+      ),
+      Response.json({ requestId: "req_running", sku: "reddit.search", status: "succeeded", createdAt: "now", result }),
+    ];
+    const fetchImpl: FetchLike = async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return responses.shift() as Response;
+    };
+    const ctx = commandContext(fetchImpl);
+
+    await runCommand(ctx, { apiKey: "aa_live_test" }, "reddit.search", { input: '{"query":"anyapi"}', json: true });
+
+    expect(JSON.parse(ctx.stdout.read()?.toString().trim())).toEqual(result);
+    expect(calls.filter((call) => call.startsWith("POST"))).toHaveLength(1);
+    expect(calls.slice(1).every((call) => call.endsWith("/requests/req_running"))).toBe(true);
+    expect(calls).toHaveLength(3);
   });
 });
 
