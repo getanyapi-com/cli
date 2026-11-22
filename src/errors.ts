@@ -19,12 +19,15 @@ export class ApiError extends Error {
    * no run.
    */
   readonly requestId: string;
+  /** Whole seconds from the response's Retry-After header, when it sent one. */
+  readonly retryAfterSeconds: number | undefined;
 
-  constructor(message: string, status: number, body: unknown, requestId = '') {
+  constructor(message: string, status: number, body: unknown, requestId = '', retryAfterSeconds?: number) {
     super(requestId === '' ? message : `${message} (request ${requestId})`);
     this.name = 'ApiError';
     this.status = status;
     this.body = body;
     this.requestId = requestId;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }

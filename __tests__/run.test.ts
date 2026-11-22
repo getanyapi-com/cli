@@ -167,6 +167,25 @@ describe("run idempotency", () => {
   });
 });
 
+describe("run rate limit", () => {
+  it("tells the caller how long to wait on 429 rate_limited", async () => {
+    const fetchImpl: FetchLike = async () =>
+      Response.json(
+        { error: "limit reached", code: "rate_limited" },
+        { status: 429, headers: { "Retry-After": "37" } },
+      );
+
+    await expect(
+      runCommand(commandContext(fetchImpl), { apiKey: "aa_live_test" }, "reddit.search", {
+        input: '{"query":"anyapi"}',
+        json: true,
+      }),
+    ).rejects.toThrow(
+      "This account has reached its limit of new requests a minute to this API. Nothing was run or charged. Wait 37 seconds, then run it again.",
+    );
+  });
+});
+
 function commandContext(fetchImpl: FetchLike): CommandContext {
   return {
     cwd: "/tmp",
